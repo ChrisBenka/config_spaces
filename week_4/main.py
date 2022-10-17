@@ -1,5 +1,6 @@
 import argparse
 from image_plotter import Plotter
+import multiprocessing
 parser = argparse.ArgumentParser(description='Create workspace,config space plots.')
 
 parser.add_argument("--data_directory",help="directory to save images")
@@ -15,4 +16,5 @@ parser.add_argument("--width_workspace", help="width_workspace")
 if __name__ == '__main__':
     args = parser.parse_args()
     plotter = Plotter(args)
-    plotter.plot_workspace_cobs_pairs()
+    pool = multiprocessing.Pool(5)
+    pool.map(plotter.plot_workspace_cobs_pairs,[(0,200),(201,400),(401,600),(601,800),(801,1000)])
