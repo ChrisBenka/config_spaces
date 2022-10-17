@@ -1,10 +1,13 @@
 import math
 from shapely.geometry import Polygon, Point, LineString, MultiPoint
 from shapely import affinity
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from utils import round_point, round_polygon, round_line_string, midpoint
 import random
 
+plt.ioff()
 
 class Plotter:
     def __init__(self, args):
@@ -32,12 +35,15 @@ class Plotter:
         self.q1 = [0, 360]
         self.q2 = [0, -359]
 
-    def plot_workspace(self, obstacles,plot_id, include_robot=False, q1=0, q2=0, include_labels=False, title="Workspace"):
+    def plot_workspace(self, obstacles, plot_id, include_robot=False, q1=0, q2=0, include_labels=False,
+                       title="Workspace",file_nm=None):
         fig, ax = plt.subplots(figsize=(10, 10))
+        ax.set_xlim([-5, 5])
+        ax.set_ylim([-5, 5])
         if include_robot:
             arm_1_rot = q1
             robot_arm1 = round_polygon(affinity.rotate(self.robot_arm1_og, arm_1_rot, self.arm_1_joint))
-            total_a = round_polygon(affinity.rotate(self.robot_arm1_og, arm_1_rot, self.arm_1_joint))
+            total_a = round_polygon(affinity.rotate(self.total_arm_og, arm_1_rot, self.arm_1_joint))
 
             total_a_coords = {*total_a.exterior.coords}
             arm_1_coords = {*robot_arm1.exterior.coords}
@@ -52,18 +58,21 @@ class Plotter:
             upper_arm_rotate = affinity.rotate(upper_arm, -q2, upper_arm_joint)
 
             ax.fill(*robot_arm1.exterior.xy, color='green')
-            ax.plot(self.origin[0], self.origin[1], marker="o", markerfacecolor="black", label='q1 - [0,360]')
+            ax.plot(self.origin.x, self.origin.y, marker="o", markerfacecolor="black", label='q1 - [0,360]')
             ax.plot(upper_arm_joint[0], upper_arm_joint[1], marker="o", markerfacecolor="black", label='q2 - [0,180]')
             ax.fill(*upper_arm_rotate.exterior.xy, color='blue')
 
-        ax.set_xlim([-5, 5])
-        ax.set_ylim([-5, 5])
+
         self.plot_polys(obstacles)
         if include_labels:
             ax.legend(bbox_to_anchor=(1, 1))
             ax.set_title(title)
         plt.grid()
-        plt.savefig(f"./data/workspace/{plot_id}")
+        if file_nm:
+            plt.savefig(f"./data/workspace/{file_nm}")
+        else:
+            plt.savefig(f"./data/workspace/{plot_id}")
+        plt.close(fig)  # close the figure window
 
     def calculate_cobs(self, obstacles):
         c_pts = []
@@ -128,12 +137,25 @@ class Plotter:
         plt.savefig(id)
 
     def plot_workspace_cobs_pairs(self):
+        for i in range(1):
+            obstacles = self.generate_obstacle_origins()
+            self.plot_workspace(obstacles,i,True, include_labels=True,file_nm="workspace_complete")
         for i in range(self.num_images):
-            obstacle_origins = set([])
-            while len(obstacle_origins) < self.num_obstacles:
-                obstacle_origins.add(tuple([round(random.uniform(-5, 5), 4) for i in range(2)]))
-            obstacles = [Point(pt[0], pt[1]).buffer(self.obstacle_radii) for pt in obstacle_origins]
-            self.plot_workspace(obstacles, True,i,include_labels=True)
+            obstacles = self.generate_obstacle_origins()
+            self.plot_workspace(obstacles,i,False,include_labels=False)
+
+    def generate_obstacle_origins(self):
+        obstacle_origins = set([])
+        while len(obstacle_origins) < self.num_obstacles:
+            new_obstacle = tuple([round(random.uniform(-4.5, 4.5), 4) for i in range(2)])
+            can_add = True
+            for obst in obstacle_origins:
+                if Point(obst).buffer(self.obstacle_radii).intersects(Point(new_obstacle).buffer(self.obstacle_radii)):
+                    can_add = False
+            if can_add:
+                obstacle_origins.add(new_obstacle)
+        obstacles = [Point(pt[0], pt[1]).buffer(self.obstacle_radii) for pt in obstacle_origins]
+        return obstacles
 
     def plot_polys(self, polys):
         for poly_id, poly in enumerate(polys):
