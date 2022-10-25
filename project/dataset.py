@@ -13,7 +13,7 @@ matplotlib.use('TkAgg')
 class ConfigSpaceDataset(Dataset):
     def __init__(self, root_dir, transform=transforms.Compose([ToTensor(), Resize(256)])):
         self.workspace_dir = root_dir + "/workspace/"
-        self.configspace_dir = root_dir + "/configspace/"
+        self.configspace_dir = root_dir + "/cobs/"
 
         assert os.path.exists(self.workspace_dir), "Expected 2 folders to be present in root directory, worksapce/ and " \
                                                    "configspace/. Missing worksapce/ "
@@ -41,8 +41,8 @@ class ConfigSpaceDataset(Dataset):
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
-        workspace_image_name = os.path.join(self.workspace_dir, f"{index}.png")
-        configspace_image_name = os.path.join(self.configspace_dir, f"{index}.png")
+        workspace_image_name = os.path.join(self.workspace_dir, f"{index+1}.png")
+        configspace_image_name = os.path.join(self.configspace_dir, f"{index+1}.png")
         workspace = io.imread(workspace_image_name)
         configspace = io.imread(configspace_image_name)
 
