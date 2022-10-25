@@ -3,14 +3,15 @@ import os
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
-from torchvision.transforms import Resize,ToTensor
+from torchvision.transforms import Resize, ToTensor
 from skimage import io
-import matplotlib.pyplot as plt
 import matplotlib
+
 matplotlib.use('TkAgg')
 
+
 class ConfigSpaceDataset(Dataset):
-    def __init__(self, root_dir, transform=transforms.Compose([ToTensor(),Resize(256)])):
+    def __init__(self, root_dir, transform=transforms.Compose([ToTensor(), Resize(256)])):
         self.workspace_dir = root_dir + "/workspace/"
         self.configspace_dir = root_dir + "/configspace/"
 
@@ -53,7 +54,8 @@ class ConfigSpaceDataset(Dataset):
 
 
 if __name__ == '__main__':
+    print(os.getcwd())
     configspace_dataset = ConfigSpaceDataset("./data")
     for i in range(len(configspace_dataset))[:1]:
         sample = configspace_dataset[i]
-        print(i,sample['workspace'].shape,sample['configspace'].shape)
+        print(i, sample['workspace'].shape, sample['configspace'].shape)

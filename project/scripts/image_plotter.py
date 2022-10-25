@@ -33,6 +33,10 @@ class Plotter:
              Point(self.total_arm_length, .5)])).convex_hull
 
         self.arm_1_joint = self.origin
+        self.workspace_dir = args.data_dir + "workspace/"
+        self.configspace_dir = args.data_dir + "cobs/"
+        self.include_self_collision = args.include_self_collision
+        self.include_axis = args.include_axis
 
         self.q1 = [0, 360]
         self.q2 = [0, -359]
@@ -68,11 +72,17 @@ class Plotter:
         if include_labels:
             ax.legend(bbox_to_anchor=(1, 1))
             ax.set_title(title)
+        # if not self.include_axis:
+        #     ax.axis("off")
+        #     ax.xaxis.set_visible(False)
+        #     ax.yaxis.set_visible(False)
         plt.grid()
         if file_nm:
-            plt.savefig(f"./data/workspace/{file_nm}")
+            plt.savefig(f"{self.workspace_dir}{file_nm}")
         else:
-            plt.savefig(f"./data/workspace/{plot_id}")
+            plt.savefig(f"{self.workspace_dir}{plot_id}")
+
+
         plt.close(fig)  # close the figure window
 
     def calculate_cobs(self, obstacles):
@@ -94,7 +104,7 @@ class Plotter:
             c_upper_arm_joint = midpoint(c_possible_joints[0], c_possible_joints[1])
 
             for j in range(self.q2[0], self.q2[1] - 1, -1):
-                if 170 <= abs(j) <= 190:
+                if self.include_self_collision and 170 <= abs(j) <= 190:
                     c_pts.append((i, abs(j), 3))
                     continue
                 c_arm_2_rotated = round_polygon(affinity.rotate(c_upper_arm, j, c_upper_arm_joint))
@@ -141,10 +151,14 @@ class Plotter:
 
         if include_labels:
             ax.legend(bbox_to_anchor=(1, 1))
+        # if not self.include_axis:
+            # ax.xaxis.set_visible(False)
+            # ax.yaxis.set_visible(False)
         if file_nm:
-            plt.savefig(f"./data/config_space/{file_nm}")
+            plt.savefig(f"{self.configspace_dir}{file_nm}")
         else:
-            plt.savefig(f"./data/config_space/{id}")
+            plt.savefig(f"{self.configspace_dir}{id}")
+
         plt.close()
 
     def plot_workspace_cobs_pairs(self, image_config):
