@@ -183,7 +183,7 @@ class Decoder(nn.Module):
         # Decoder layer 1 (corresponds to encoder layer 1)
         self.de_1_1 = nn.Sequential(
             nn.ConvTranspose2d(64, 64, stride=1, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
+            nn.BatchNorm2d(64),
             nn.ReLU()
         )
         self.de_1_2 = nn.Sequential(
