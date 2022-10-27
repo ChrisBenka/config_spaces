@@ -1,12 +1,12 @@
 import time
 import argparse
-from config_spaces.project.model import SegNet
-from config_spaces.project.dataset import ConfigSpaceDataset
+from project.model import SegNet
+from project.dataset import ConfigSpaceDataset
 from torchvision import transforms
 from torchvision.transforms import ToTensor, Grayscale, Resize, Compose
 from torch import nn, optim
 
-data_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/scripts/data"
+data_path = "/Users/chrisbenka/Documents/columbia/Fall'22/config_space_research/project/scripts/data"
 from matplotlib import pyplot as plt
 import numpy as np
 import torch
@@ -18,14 +18,13 @@ parser = argparse.ArgumentParser(description='workspace-configspace')
 parser.add_argument('--data', type=str, default='./data/wikitext-103', help='location of corpus')
 parser.add_argument('--epochs', type=int, default=50, help='num epochs')
 parser.add_argument('--seed', type=int, default=26, help='seed')
-parser.add_argument('--cuda', default=True, action='store_true', help='cuda')
+parser.add_argument('--cuda', default=False, action='store_false', help='cuda')
 parser.add_argument('--batch_size', type=int, default=128, help='training batch size')
 parser.add_argument('--log-interval', type=int, default=200, metavar='N', help='report interval')
-parser.add_argument('--seed', type=int, default=26, help='seed')
 
 
 def show(img):
-    npimg = img.numpy()
+    npimg = img.detach().numpy()
     plt.imshow(np.transpose(npimg, (1, 2, 0)), cmap='gray')
     plt.axis("off")
 
@@ -94,7 +93,7 @@ def train(model: nn.Module, opt: torch.optim, train_data: DataLoader, val_data: 
 
 if __name__ == '__main__':
     get_rid_alpha = transforms.Lambda(lambda x: x[:3])
-    transforms = Compose([ToTensor(), get_rid_alpha, Resize(512), Grayscale()])
+    transforms = Compose([ToTensor(), get_rid_alpha, Resize((512,512)), Grayscale()])
     dataset = ConfigSpaceDataset(data_path, transform=transforms)
 
     train_size = int(0.6 * len(dataset))
@@ -103,34 +102,39 @@ if __name__ == '__main__':
 
     train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, val_size, test_size])
 
-    train_dataloader = DataLoader(train_dataset, batch_size=12, shuffle=True)
-    val_dataloader = DataLoader(val_dataset,batch_size=12,shuffle=True)
-    test_dataloader = DataLoader(test_dataset,batch_size=12,shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)
+    # val_dataloader = DataLoader(val_dataset,batch_size=12,shuffle=True)
+    test_dataloader = DataLoader(test_dataset,batch_size=1,shuffle=True)
 
     hyperparams = parser.parse_args()
     np.random.seed(hyperparams.seed)
     torch.manual_seed(hyperparams.seed)
 
-    device = torch.device("cuda" if hyperparams.cuda else "cpu")
+    device = torch.device("cpu")
 
-    if hyperparams.cuda and not torch.cuda.is_available():
-        raise Exception("CUDA is not available for use try running without --cuda")
+    # if hyperparams.cuda and not torch.cuda.is_available():
+    #     raise Exception("CUDA is not available for use try running without --cuda")
 
     print(f"USING {device}")
     print(f"Training on {hyperparams.data}")
     in_channels, out_channels = 1, 1
-    model = SegNet(in_channels, out_channels)
+    model = SegNet()
     total_params = sum(x.data.nelement() for x in model.parameters())
     print("Total number of params: {}".format(total_params))
 
     model.to(device)
+    for batch in train_dataloader:
+        workspace_images = batch['workspace']
+        ouput = model(workspace_images)
+        show(batch  [0])
+        break
 
-    OPT = optim.Adam(model.parameters(),lr=hyperparams.lr)
-
+    opt = optim.Adam(model.parameters(),lr=.01)
+    #
     try:
         print('-' * 100)
         print("Starting training...")
-        train(model,optim,train_dataloader,val_dataloader,hyperparams)
+        train(model,opt,train_dataloader,val_dataloader,hyperparams)
     except KeyboardInterrupt:
         print('=' * 100)
         print("Exiting from training...")
