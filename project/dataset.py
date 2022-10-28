@@ -41,15 +41,21 @@ class ConfigSpaceDataset(Dataset):
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
-        workspace_image_name = os.path.join(self.workspace_dir, f"{index+1}.png")
-        configspace_image_name = os.path.join(self.configspace_dir, f"{index+1}.png")
-        workspace = io.imread(workspace_image_name)
-        configspace = io.imread(configspace_image_name)
+        workspace_image_name = os.path.join(self.workspace_dir, f"{index}.png")
+        configspace_image_name = os.path.join(self.configspace_dir, f"{index}.png")
+        try:
+            workspace = io.imread(workspace_image_name)
+            configspace = io.imread(configspace_image_name)
+        except FileNotFoundError:
+            workspace_image_name = os.path.join(self.workspace_dir, f"{0}.png")
+            configspace_image_name = os.path.join(self.configspace_dir, f"{0}.png")
+            workspace = io.imread(workspace_image_name)
+            configspace = io.imread(configspace_image_name)
 
         if self.transform:
             workspace = self.transform(workspace)
             configspace = self.transform(configspace)
-        sample = {'workspace': workspace, 'configspace': configspace}
+        sample = {'workspace': workspace, 'configspace': configspace, id: index}
         return sample
 
 
