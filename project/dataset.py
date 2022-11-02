@@ -16,10 +16,10 @@ class ConfigSpaceDataset(Dataset):
         self.configspace_dir = root_dir + "/cobs/"
 
         assert os.path.exists(self.workspace_dir), "Expected 2 folders to be present in root directory, worksapce/ and " \
-                                                   "configspace/. Missing worksapce/ "
+                                                   "cobs/. Missing worksapce/ "
         assert os.path.exists(
             self.configspace_dir), "Expected 2 folders to be present in root directory, worksapce/ and " \
-                                   "configspace/. Missing configspace/ "
+                                   "cobs/. Missing cobs/ "
 
         self.num_workspace_images = len(
             [name for name in os.listdir(self.workspace_dir) if os.path.isfile(os.path.join(self.workspace_dir, name))])
@@ -27,11 +27,11 @@ class ConfigSpaceDataset(Dataset):
             [name for name in os.listdir(self.configspace_dir) if
              os.path.isfile(os.path.join(self.configspace_dir, name))])
 
-        assert self.num_configspace_images == self.num_workspace_images, f"Expected number of configspace images to " \
+        assert self.num_configspace_images == self.num_workspace_images, f"Expected number of cobs images to " \
                                                                          f"equal number of workspace images. Number " \
                                                                          f"of workspace images: " \
                                                                          f"{self.num_workspace_images} Number of " \
-                                                                         f"configspace images:" \
+                                                                         f"cobs images:" \
                                                                          f"{self.num_configspace_images}"
         self.transform = transform
 
@@ -47,15 +47,15 @@ class ConfigSpaceDataset(Dataset):
             workspace = io.imread(workspace_image_name)
             configspace = io.imread(configspace_image_name)
         except FileNotFoundError:
-            workspace_image_name = os.path.join(self.workspace_dir, f"{0}.png")
-            configspace_image_name = os.path.join(self.configspace_dir, f"{0}.png")
+            workspace_image_name = os.path.join(self.workspace_dir, f"{1}.png")
+            configspace_image_name = os.path.join(self.configspace_dir, f"{1}.png")
             workspace = io.imread(workspace_image_name)
             configspace = io.imread(configspace_image_name)
 
         if self.transform:
             workspace = self.transform(workspace)
             configspace = self.transform(configspace)
-        sample = {'workspace': workspace, 'configspace': configspace, id: index}
+        sample = {'workspace': workspace, 'cobs': configspace, 'id': index}
         return sample
 
 
@@ -64,4 +64,4 @@ if __name__ == '__main__':
     configspace_dataset = ConfigSpaceDataset("./data")
     for i in range(len(configspace_dataset))[:1]:
         sample = configspace_dataset[i]
-        print(i, sample['workspace'].shape, sample['configspace'].shape)
+        print(i, sample['workspace'].shape, sample['cobs'].shape)

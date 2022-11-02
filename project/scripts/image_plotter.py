@@ -78,10 +78,9 @@ class Plotter:
         #     ax.yaxis.set_visible(False)
         plt.grid()
         if file_nm:
-            plt.savefig(f"{self.workspace_dir}{file_nm}")
+            plt.savefig(f"{self.workspace_dir}{file_nm}",bbox_inches='tight')
         else:
-            plt.savefig(f"{self.workspace_dir}{plot_id}")
-
+            plt.savefig(f"{self.workspace_dir}{plot_id}",bbox_inches='tight')
 
         plt.close(fig)  # close the figure window
 
@@ -116,7 +115,7 @@ class Plotter:
 
     def plot_cobs(self, c_obs, id, group_by_obs=True, include_labels=False, file_nm=None):
         def group_c_obs_by_obs_id(c_obs):
-            res = [[], [], [],[]]
+            res = [[], [], [], []]
             for c in c_obs:
                 if c[-1] == 0:
                     res[0].append(c[:2])
@@ -139,7 +138,7 @@ class Plotter:
             for group_id, group in enumerate(grouped_cobs):
                 x_s = list(map(lambda pt: pt[0], group))
                 y_s = list(map(lambda pt: pt[1], group))
-                label = "c-obs-self-collision" if group_id == 3  else f"c_obs-obst{group_id + 1}"
+                label = "c-obs-self-collision" if group_id == 3 else f"c_obs-obst{group_id + 1}"
                 ax.scatter(x_s, y_s, label=label)
         else:
             x_s = list(map(lambda pt: pt[0], c_obs))
@@ -152,17 +151,17 @@ class Plotter:
         if include_labels:
             ax.legend(bbox_to_anchor=(1, 1))
         # if not self.include_axis:
-            # ax.xaxis.set_visible(False)
-            # ax.yaxis.set_visible(False)
+        # ax.xaxis.set_visible(False)
+        # ax.yaxis.set_visible(False)
         if file_nm:
-            plt.savefig(f"{self.configspace_dir}{file_nm}")
+            plt.savefig(f"{self.configspace_dir}{file_nm}", bbox_inches='tight')
         else:
-            plt.savefig(f"{self.configspace_dir}{id}")
+            plt.savefig(f"{self.configspace_dir}{id}", bbox_inches='tight')
 
         plt.close()
 
     def plot_workspace_cobs_pairs(self, image_config):
-        start_image,end_image = image_config
+        start_image, end_image = image_config
         if start_image == 0:
             for i in range(1):
                 obstacles = self.generate_obstacle_origins()
@@ -183,7 +182,8 @@ class Plotter:
             for obst in obstacle_origins:
                 if Point(obst).buffer(self.obstacle_radii).intersects(Point(new_obstacle).buffer(self.obstacle_radii)):
                     can_add = False
-                elif Point(self.origin).buffer(self.obstacle_radii).intersects(Point(new_obstacle).buffer(self.obstacle_radii)):
+                elif Point(self.origin).buffer(self.obstacle_radii).intersects(
+                        Point(new_obstacle).buffer(self.obstacle_radii)):
                     can_add = False
             if can_add:
                 obstacle_origins.add(new_obstacle)

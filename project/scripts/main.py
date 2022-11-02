@@ -3,7 +3,7 @@ from config_spaces.project.scripts.image_plotter import Plotter
 import multiprocessing
 parser = argparse.ArgumentParser(description='Create workspace,config space plots.')
 
-parser.add_argument("--data_dir",help="directory to save images",default='/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/scripts/data/')
+parser.add_argument("--data_dir",help="directory to save images",default='/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/data/')
 parser.add_argument("--num_images", help="Number of worksapce, c_obs image pairs to be generated",default=5000)
 parser.add_argument("--num_obstacles", help="number of obstacles in workspace",default=1)
 parser.add_argument("--obstacle_radii", help="radii of each obstacle",default=.5)
