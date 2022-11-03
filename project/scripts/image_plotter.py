@@ -76,7 +76,7 @@ class Plotter:
         #     ax.axis("off")
         #     ax.xaxis.set_visible(False)
         #     ax.yaxis.set_visible(False)
-        plt.grid()
+        plt.plot()
         if file_nm:
             plt.savefig(f"{self.workspace_dir}{file_nm}",bbox_inches='tight')
         else:
