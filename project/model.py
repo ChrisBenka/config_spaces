@@ -109,12 +109,14 @@ class SegNet(nn.Module):
         x = self.relu(self.BNEn11(self.ConvEn11(x)))
         x = self.relu(self.BNEn12(self.ConvEn12(x)))
         x, ind1 = self.MaxEn(x)
+        x = self.cbam_1(x)
         size1 = x.size()
 
         # Stage 2
         x = self.relu(self.BNEn21(self.ConvEn21(x)))
         x = self.relu(self.BNEn22(self.ConvEn22(x)))
         x, ind2 = self.MaxEn(x)
+        x = self.cbam_2(x)
         size2 = x.size()
 
         # Stage 3
@@ -122,6 +124,7 @@ class SegNet(nn.Module):
         x = self.relu(self.BNEn32(self.ConvEn32(x)))
         x = self.relu(self.BNEn33(self.ConvEn33(x)))
         x, ind3 = self.MaxEn(x)
+        x = self.cbam_3(x)
         size3 = x.size()
 
         # Stage 4
@@ -129,6 +132,7 @@ class SegNet(nn.Module):
         x = self.relu(self.BNEn42(self.ConvEn42(x)))
         x = self.relu(self.BNEn43(self.ConvEn43(x)))
         x, ind4 = self.MaxEn(x)
+        x = self.cbam_4(x)
         size4 = x.size()
 
         # Stage 5
@@ -136,6 +140,7 @@ class SegNet(nn.Module):
         x = self.relu(self.BNEn52(self.ConvEn52(x)))
         x = self.relu(self.BNEn53(self.ConvEn53(x)))
         x, ind5 = self.MaxEn(x)
+        x = self.cbam_5(x)
         size5 = x.size()
 
         # DECODE LAYERS
