@@ -1,23 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-
-# class GuidedBackpropRelu(torch.autograd.Function):
-#     @staticmethod
-#     def forward(ctx, input):
-#         ctx.save_for_backward(input)
-#         return input.clamp(min=0)
-#
-#     @staticmethod
-#     def backward(ctx, grad_output):
-#         input = ctx.saved_tensors[0]
-#         grad_input = grad_output.clone()
-#
-#         grad_input[grad_input < 0] = 0
-#         grad_input[input < 0] = 0
-#         return grad_input
-
+from ConvolutionalBlackAttention import cbam
 
 class SegNet(nn.Module):
 
@@ -44,11 +28,13 @@ class SegNet(nn.Module):
         self.BNEn11 = nn.BatchNorm2d(64, momentum=BN_momentum)
         self.ConvEn12 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
         self.BNEn12 = nn.BatchNorm2d(64, momentum=BN_momentum)
+        self.cbam_1 = cbam(64)
 
         self.ConvEn21 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
         self.BNEn21 = nn.BatchNorm2d(128, momentum=BN_momentum)
         self.ConvEn22 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
         self.BNEn22 = nn.BatchNorm2d(128, momentum=BN_momentum)
+        self.cbam_2 = cbam(128)
 
         self.ConvEn31 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
         self.BNEn31 = nn.BatchNorm2d(256, momentum=BN_momentum)
@@ -56,6 +42,8 @@ class SegNet(nn.Module):
         self.BNEn32 = nn.BatchNorm2d(256, momentum=BN_momentum)
         self.ConvEn33 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
         self.BNEn33 = nn.BatchNorm2d(256, momentum=BN_momentum)
+        self.cbam_3 = cbam(256)
+
 
         self.ConvEn41 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
         self.BNEn41 = nn.BatchNorm2d(512, momentum=BN_momentum)
@@ -63,6 +51,7 @@ class SegNet(nn.Module):
         self.BNEn42 = nn.BatchNorm2d(512, momentum=BN_momentum)
         self.ConvEn43 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
         self.BNEn43 = nn.BatchNorm2d(512, momentum=BN_momentum)
+        self.cbam_4 = cbam(512)
 
         self.ConvEn51 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
         self.BNEn51 = nn.BatchNorm2d(512, momentum=BN_momentum)
@@ -70,7 +59,7 @@ class SegNet(nn.Module):
         self.BNEn52 = nn.BatchNorm2d(512, momentum=BN_momentum)
         self.ConvEn53 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
         self.BNEn53 = nn.BatchNorm2d(512, momentum=BN_momentum)
-
+        self.cbam_5 = cbam(512)
         self.relu = nn.ReLU()
 
         # DECODING consists of 5 stages
@@ -85,6 +74,7 @@ class SegNet(nn.Module):
         self.BNDe52 = nn.BatchNorm2d(512, momentum=BN_momentum)
         self.ConvDe51 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
         self.BNDe51 = nn.BatchNorm2d(512, momentum=BN_momentum)
+        self.cbam_6 = cbam(512)
 
         self.ConvDe43 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
         self.BNDe43 = nn.BatchNorm2d(512, momentum=BN_momentum)
@@ -92,6 +82,7 @@ class SegNet(nn.Module):
         self.BNDe42 = nn.BatchNorm2d(512, momentum=BN_momentum)
         self.ConvDe41 = nn.Conv2d(512, 256, kernel_size=3, padding=1)
         self.BNDe41 = nn.BatchNorm2d(256, momentum=BN_momentum)
+        self.cbam_7 = cbam(256)
 
         self.ConvDe33 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
         self.BNDe33 = nn.BatchNorm2d(256, momentum=BN_momentum)
@@ -99,11 +90,13 @@ class SegNet(nn.Module):
         self.BNDe32 = nn.BatchNorm2d(256, momentum=BN_momentum)
         self.ConvDe31 = nn.Conv2d(256, 128, kernel_size=3, padding=1)
         self.BNDe31 = nn.BatchNorm2d(128, momentum=BN_momentum)
+        self.cbam_8 = cbam(128)
 
         self.ConvDe22 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
         self.BNDe22 = nn.BatchNorm2d(128, momentum=BN_momentum)
         self.ConvDe21 = nn.Conv2d(128, 64, kernel_size=3, padding=1)
         self.BNDe21 = nn.BatchNorm2d(64, momentum=BN_momentum)
+        self.cbam_9 = cbam(64)
 
         self.ConvDe12 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
         self.BNDe12 = nn.BatchNorm2d(64, momentum=BN_momentum)
