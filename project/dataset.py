@@ -11,7 +11,7 @@ matplotlib.use('TkAgg')
 
 
 class ConfigSpaceDataset(Dataset):
-    def __init__(self, root_dir, transform=transforms.Compose([ToTensor(), Resize(256)])):
+    def __init__(self, root_dir, workspace_transform=transforms.Compose([ToTensor(), Resize(256)]), configspace_transform=transforms.Compose([ToTensor(), Resize(256)])):
         self.workspace_dir = root_dir + "/workspace/"
         self.configspace_dir = root_dir + "/cobs/"
 
@@ -33,7 +33,8 @@ class ConfigSpaceDataset(Dataset):
                                                                          f"{self.num_workspace_images} Number of " \
                                                                          f"cobs images:" \
                                                                          f"{self.num_configspace_images}"
-        self.transform = transform
+        self.workspace_transform = workspace_transform
+        self.configspace_transform = configspace_transform
 
     def __len__(self):
         return self.num_configspace_images
@@ -52,9 +53,11 @@ class ConfigSpaceDataset(Dataset):
             workspace = io.imread(workspace_image_name)
             configspace = io.imread(configspace_image_name)
 
-        if self.transform:
-            workspace = self.transform(workspace)
-            configspace = self.transform(configspace)
+        if self.workspace_transform:
+            workspace = self.workspace_transform(workspace)
+        if self.configspace_transform:
+            configspace = self.configspace_transform(configspace)
+
         sample = {'workspace': workspace, 'cobs': configspace, 'id': index}
         return sample
 

@@ -4,6 +4,7 @@ from model import SegNet
 from dataset import ConfigSpaceDataset
 from torchvision import transforms
 from torchvision.transforms import ToTensor, Grayscale, Resize, Compose
+from Transforms import ThresholdTransform
 from torch import nn, optim
 from torch.optim.lr_scheduler import MultiStepLR
 from matplotlib import pyplot as plt
@@ -13,7 +14,6 @@ from torch.utils.data import DataLoader
 import os
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
-from captum.attr import GuidedBackprop
 
 data_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/scripts/data"
 ouput_imgs_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/scripts/data/l2/generated"
@@ -129,7 +129,7 @@ def train(model: nn.Module, opt: torch.optim, scheduler: MultiStepLR, train_data
 if __name__ == '__main__':
     get_rid_alpha = transforms.Lambda(lambda x: x[:3])
     transforms = Compose([ToTensor(), get_rid_alpha, Resize((512, 512)), Grayscale()])
-    dataset = ConfigSpaceDataset(data_path, transform=transforms)
+    dataset = ConfigSpaceDataset(data_path, workspace_transform=transforms,configspace_transform=transforms)
 
     train_size = int(0.7 * len(dataset))
     val_size = int(.15 * len(dataset))
@@ -159,9 +159,8 @@ if __name__ == '__main__':
     print("Total number of params: {}".format(total_params))
     model = model.to(device)
     opt = optim.Adadelta(model.parameters(), lr=.01, weight_decay=1e-4)
-    scheduler = MultiStepLR(opt,
-                            milestones=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180,
-                                        190, 200, 210, 220, 230, 240, 250], gamma=.75)
+    scheduler = MultiStepLR(opt,milestones=[25,50,75,100,125,150,175,200,225], gamma=.75)
+
     print(scheduler.get_last_lr()[0])
     try:
         print('-' * 100)
