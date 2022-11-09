@@ -1,13 +1,9 @@
 import os
-
 import torch
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
+from torch.utils.data import Dataset
+from torchvision import transforms
 from torchvision.transforms import Resize, ToTensor
-from skimage import io
-import matplotlib
-
-matplotlib.use('TkAgg')
+from PIL import Image
 
 
 class ConfigSpaceDataset(Dataset):
@@ -45,13 +41,13 @@ class ConfigSpaceDataset(Dataset):
         workspace_image_name = os.path.join(self.workspace_dir, f"{index}.png")
         configspace_image_name = os.path.join(self.configspace_dir, f"{index}.png")
         try:
-            workspace = io.imread(workspace_image_name)
-            configspace = io.imread(configspace_image_name)
+            workspace = Image.open(workspace_image_name)
+            configspace = Image.open(configspace_image_name)
         except FileNotFoundError:
             workspace_image_name = os.path.join(self.workspace_dir, f"{1}.png")
             configspace_image_name = os.path.join(self.configspace_dir, f"{1}.png")
-            workspace = io.imread(workspace_image_name)
-            configspace = io.imread(configspace_image_name)
+            workspace = Image.open(workspace_image_name)
+            configspace = Image.open(configspace_image_name)
 
         if self.workspace_transform:
             workspace = self.workspace_transform(workspace)
