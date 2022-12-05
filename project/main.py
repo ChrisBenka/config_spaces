@@ -3,7 +3,7 @@ import argparse
 from model import SegNet
 from dataset import ConfigSpaceDataset
 from torchvision import transforms
-from torchvision.transforms import ToTensor, Grayscale, Resize, Compose
+from torchvision.transforms import ToTensor, Grayscale, Resize, Compose, CenterCrop
 from Transforms import ThresholdTransform
 from torch import nn, optim
 from torch.optim.lr_scheduler import MultiStepLR
@@ -19,8 +19,8 @@ import os
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
-data_path = "/Users/chrisbenka/Documents/columbia/Fall'22/config_space_research/project/scripts/data_grid"
-weights_folder = "/Users/chrisbenka/Documents/columbia/Fall'22/config_space_research/project/weights/"
+data_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/data/one_10k"
+weights_folder = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/"
 
 criterion = None
 criterion_2 = None
@@ -31,14 +31,14 @@ parser.add_argument('--weights-folder', type=str, default=weights_folder, help='
 parser.add_argument('--weights-file', type=str, default='./02-11-22-11_51_SEGNET-l2-1.pth', help='weights file name')
 parser.add_argument('--use-last-checkpoint', default=False, action='store_true', help='use last checkpoint')
 parser.add_argument('--num-obstacles', type=int, default=1, help='number of obstacles in dataset images')
-parser.add_argument('--loss-fn', type=str, default='l2_l1',
+parser.add_argument('--loss-fn', type=str, default='l1',
                     help='Loss function to train on. supported options: l1,l2,l2_l1,bce')
 parser.add_argument('--generate-images-interval', type=int, default=1)
 parser.add_argument('--num-epochs', type=int, default=250, help='num epochs')
 parser.add_argument('--seed', type=int, default=26, help='seed')
 parser.add_argument('--cuda', default=True, action='store_true', help='cuda')
 parser.add_argument('--batch_size', type=int, default=5, help='training batch size')
-parser.add_argument('--log-interval', type=int, default=2, metavar='N', help='report interval')
+parser.add_argument('--log-interval', type=int, default=100, metavar='N', help='report interval')
 
 writer = SummaryWriter()
 
@@ -53,6 +53,7 @@ def save_img(img, file_name):
 
 def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hyperparams):
     model.train()
+    total_train_loss_log = 0
     total_train_loss = 0
     i = 0
     start_time = time.time()
@@ -72,11 +73,11 @@ def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hy
             loss = criterion(predicted_config_spaces, config_spaces)
         loss.backward()
         opt.step()
+        total_train_loss_log += loss.item()
         total_train_loss += loss.item()
 
         if i % hyperparams.log_interval == 0:
-            curr_loss = total_train_loss / hyperparams.log_interval
-            writer.add_scalar('training_loss', curr_loss, epoch * len(train_data) + i)
+            curr_loss = total_train_loss_log / hyperparams.log_interval
             elapsed = time.time() - start_time
             if criterion_2:
                 loss_fn = 'l2' if epoch % 2 == 1 else 'l1'
@@ -90,9 +91,10 @@ def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hy
                                                                                                      len(train_data),
                                                                                                      elapsed * 1000 / hyperparams.log_interval,
                                                                                                      curr_loss))
-            total_train_loss = 0
+            total_train_loss_log = 0
             start_time = time.time()
 
+        writer.add_scalar('training_loss', total_train_loss / len(train_data), epoch)
 
 
 def evaluate(model: nn.Module, data, device):
@@ -198,16 +200,14 @@ def set_critertion(loss_fn):
 
 def get_transforms(loss_fn):
     get_rid_alpha = transforms.Lambda(lambda x: x[:3])
-    w_transform = Compose([ToTensor(), get_rid_alpha, Resize((512, 512)), Grayscale()])
-    c_transform = Compose([ToTensor(), get_rid_alpha, Resize((512, 512)), Grayscale()])
-    if loss_fn == 'bce':
-        c_transform = Compose([
-            transforms.ToTensor(),
-            Resize((512, 512)),
-            get_rid_alpha,
-            transforms.Grayscale(),
-            ThresholdTransform(thr_255=240)
-        ])
+    w_transform = Compose([ToTensor(), get_rid_alpha, Resize((512, 512)), Grayscale(), ThresholdTransform(thr_255=200)])
+    c_transform = Compose([
+        transforms.ToTensor(),
+        Resize((512, 512)),
+        get_rid_alpha,
+        transforms.Grayscale(),
+        ThresholdTransform(thr_255=200)
+    ])
     return w_transform, c_transform
 
 
@@ -224,11 +224,14 @@ if __name__ == '__main__':
     dataset = ConfigSpaceDataset(data_path, workspace_transform=workspace_transforms,
                                  configspace_transform=configspace_transforms)
 
-    train_size = int(0.7 * len(dataset))
+    train_size = int(0.4 * len(dataset))
     val_size = int(.15 * len(dataset))
     test_size = len(dataset) - (train_size + val_size)
 
     train_dataset, val_size, test_dataset = torch.utils.data.random_split(dataset, [train_size, val_size, test_size])
+
+    save_img(train_dataset[0]['workspace'], "test-workspace")
+    save_img(train_dataset[0]['cobs'], "test-cobs")
 
     train_dataloader = DataLoader(train_dataset, batch_size=hyperparams.batch_size, shuffle=False)
     val_dataloader = DataLoader(train_dataset, batch_size=hyperparams.batch_size, shuffle=False)
@@ -251,7 +254,7 @@ if __name__ == '__main__':
     total_params = sum(x.data.nelement() for x in model.parameters())
     print("Total number of params: {}".format(total_params))
     model = model.to(device)
-    opt = optim.Adadelta(model.parameters(), lr=.01, weight_decay=1e-4)
+    opt = optim.Adadelta(model.parameters(), lr=.01, weight_decay=1e-3)
     scheduler = MultiStepLR(opt, milestones=[25, 50, 75, 100, 125, 150, 175, 200, 225], gamma=.75)
 
     print(scheduler.get_last_lr()[0])

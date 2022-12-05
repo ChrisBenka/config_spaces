@@ -53,7 +53,7 @@ class SegNet(nn.Module):
         self.BNEn52 = nn.BatchNorm2d(512, momentum=BN_momentum)
         self.ConvEn53 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
         self.BNEn53 = nn.BatchNorm2d(512, momentum=BN_momentum)
-        self.relu = nn.ReLU()
+        self.relu = nn.Tanh()
 
         # DECODING consists of 5 stages
         # Each stage corresponds to their respective counterparts in ENCODING
@@ -92,68 +92,70 @@ class SegNet(nn.Module):
         self.ConvDe11 = nn.Conv2d(64, self.out_chn, kernel_size=3, padding=1)
         self.BNDe11 = nn.BatchNorm2d(self.out_chn, momentum=BN_momentum)
 
+        self.threshold = torch.nn.Threshold(0,0)
+
     def forward(self, x):
         # ENCODE LAYERS
         # Stage 1
-        x = self.relu(self.BNEn11(self.ConvEn11(x)))
-        x = self.relu(self.BNEn12(self.ConvEn12(x)))
+        x = F.relu(self.BNEn11(self.ConvEn11(x)))
+        x = F.relu(self.BNEn12(self.ConvEn12(x)))
         x, ind1 = self.MaxEn(x)
         size1 = x.size()
 
         # Stage 2
-        x = self.relu(self.BNEn21(self.ConvEn21(x)))
-        x = self.relu(self.BNEn22(self.ConvEn22(x)))
+        x = F.relu(self.BNEn21(self.ConvEn21(x)))
+        x = F.relu(self.BNEn22(self.ConvEn22(x)))
         x, ind2 = self.MaxEn(x)
         size2 = x.size()
 
         # Stage 3
-        x = self.relu(self.BNEn31(self.ConvEn31(x)))
-        x = self.relu(self.BNEn32(self.ConvEn32(x)))
-        x = self.relu(self.BNEn33(self.ConvEn33(x)))
+        x = F.relu(self.BNEn31(self.ConvEn31(x)))
+        x = F.relu(self.BNEn32(self.ConvEn32(x)))
+        x = F.relu(self.BNEn33(self.ConvEn33(x)))
         x, ind3 = self.MaxEn(x)
         size3 = x.size()
 
         # Stage 4
-        x = self.relu(self.BNEn41(self.ConvEn41(x)))
-        x = self.relu(self.BNEn42(self.ConvEn42(x)))
-        x = self.relu(self.BNEn43(self.ConvEn43(x)))
+        x = F.relu(self.BNEn41(self.ConvEn41(x)))
+        x = F.relu(self.BNEn42(self.ConvEn42(x)))
+        x = F.relu(self.BNEn43(self.ConvEn43(x)))
         x, ind4 = self.MaxEn(x)
         size4 = x.size()
 
         # Stage 5
-        x = self.relu(self.BNEn51(self.ConvEn51(x)))
-        x = self.relu(self.BNEn52(self.ConvEn52(x)))
-        x = self.relu(self.BNEn53(self.ConvEn53(x)))
+        x = F.relu(self.BNEn51(self.ConvEn51(x)))
+        x = F.relu(self.BNEn52(self.ConvEn52(x)))
+        x = F.relu(self.BNEn53(self.ConvEn53(x)))
         x, ind5 = self.MaxEn(x)
         size5 = x.size()
 
         # DECODE LAYERS
         # Stage 5
         x = self.MaxDe(x, ind5, output_size=size4)
-        x = self.relu(self.BNDe53(self.ConvDe53(x)))
-        x = self.relu(self.BNDe52(self.ConvDe52(x)))
-        x = self.relu(self.BNDe51(self.ConvDe51(x)))
+        x = F.relu(self.BNDe53(self.ConvDe53(x)))
+        x = F.relu(self.BNDe52(self.ConvDe52(x)))
+        x = F.relu(self.BNDe51(self.ConvDe51(x)))
 
         # Stage 4
         x = self.MaxDe(x, ind4, output_size=size3)
-        x = self.relu(self.BNDe43(self.ConvDe43(x)))
-        x = self.relu(self.BNDe42(self.ConvDe42(x)))
-        x = self.relu(self.BNDe41(self.ConvDe41(x)))
+        x = F.relu(self.BNDe43(self.ConvDe43(x)))
+        x = F.relu(self.BNDe42(self.ConvDe42(x)))
+        x = F.relu(self.BNDe41(self.ConvDe41(x)))
 
         # Stage 3
         x = self.MaxDe(x, ind3, output_size=size2)
-        x = self.relu(self.BNDe33(self.ConvDe33(x)))
-        x = self.relu(self.BNDe32(self.ConvDe32(x)))
-        x = self.relu(self.BNDe31(self.ConvDe31(x)))
+        x = F.relu(self.BNDe33(self.ConvDe33(x)))
+        x = F.relu(self.BNDe32(self.ConvDe32(x)))
+        x = F.relu(self.BNDe31(self.ConvDe31(x)))
 
         # Stage 2
         x = self.MaxDe(x, ind2, output_size=size1)
-        x = self.relu(self.BNDe22(self.ConvDe22(x)))
-        x = self.relu(self.BNDe21(self.ConvDe21(x)))
+        x = F.relu(self.BNDe22(self.ConvDe22(x)))
+        x = F.relu(self.BNDe21(self.ConvDe21(x)))
 
         # Stage 1
         x = self.MaxDe(x, ind1)
-        x = self.relu(self.BNDe12(self.ConvDe12(x)))
-        x = self.ConvDe11(x)
-
+        x = F.relu(self.BNDe12(self.ConvDe12(x)))
+        x = F.tanh(self.ConvDe11(x))
+        x = self.threshold(x)
         return x
