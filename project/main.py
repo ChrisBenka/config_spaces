@@ -19,7 +19,7 @@ import os
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
-data_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/data/one_10k"
+data_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/data/three_10k"
 weights_folder = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/"
 
 criterion = None
@@ -31,7 +31,7 @@ parser.add_argument('--weights-folder', type=str, default=weights_folder, help='
 parser.add_argument('--weights-file', type=str, default='./02-11-22-11_51_SEGNET-l2-1.pth', help='weights file name')
 parser.add_argument('--use-last-checkpoint', default=False, action='store_true', help='use last checkpoint')
 parser.add_argument('--num-obstacles', type=int, default=1, help='number of obstacles in dataset images')
-parser.add_argument('--loss-fn', type=str, default='l1',
+parser.add_argument('--loss-fn', type=str, default='l2_l1',
                     help='Loss function to train on. supported options: l1,l2,l2_l1,bce')
 parser.add_argument('--generate-images-interval', type=int, default=1)
 parser.add_argument('--num-epochs', type=int, default=250, help='num epochs')
@@ -200,13 +200,13 @@ def set_critertion(loss_fn):
 
 def get_transforms(loss_fn):
     get_rid_alpha = transforms.Lambda(lambda x: x[:3])
-    w_transform = Compose([ToTensor(), get_rid_alpha, Resize((512, 512)), Grayscale(), ThresholdTransform(thr_255=200)])
+    w_transform = Compose([ToTensor(), get_rid_alpha, Resize((512, 512)), Grayscale(), ThresholdTransform(thr_255=240)])
     c_transform = Compose([
         transforms.ToTensor(),
         Resize((512, 512)),
         get_rid_alpha,
         transforms.Grayscale(),
-        ThresholdTransform(thr_255=200)
+        ThresholdTransform(thr_255=240)
     ])
     return w_transform, c_transform
 
@@ -254,7 +254,7 @@ if __name__ == '__main__':
     total_params = sum(x.data.nelement() for x in model.parameters())
     print("Total number of params: {}".format(total_params))
     model = model.to(device)
-    opt = optim.Adadelta(model.parameters(), lr=.01, weight_decay=1e-3)
+    opt = optim.Adadelta(model.parameters(), lr=.01)
     scheduler = MultiStepLR(opt, milestones=[25, 50, 75, 100, 125, 150, 175, 200, 225], gamma=.75)
 
     print(scheduler.get_last_lr()[0])

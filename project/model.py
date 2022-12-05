@@ -156,6 +156,5 @@ class SegNet(nn.Module):
         # Stage 1
         x = self.MaxDe(x, ind1)
         x = F.relu(self.BNDe12(self.ConvDe12(x)))
-        x = F.tanh(self.ConvDe11(x))
-        x = self.threshold(x)
+        x = self.ConvDe11(x)
         return x
