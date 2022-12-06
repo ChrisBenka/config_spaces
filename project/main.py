@@ -224,7 +224,7 @@ if __name__ == '__main__':
     dataset = ConfigSpaceDataset(data_path, workspace_transform=workspace_transforms,
                                  configspace_transform=configspace_transforms)
 
-    train_size = int(0.4 * len(dataset))
+    train_size = int(0.7 * len(dataset))
     val_size = int(.15 * len(dataset))
     test_size = len(dataset) - (train_size + val_size)
 
