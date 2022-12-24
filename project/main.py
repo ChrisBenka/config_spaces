@@ -3,7 +3,8 @@ import argparse
 from model import SegNet
 from dataset import ConfigSpaceDataset
 from torchvision import transforms
-from torchvision.transforms import ToTensor, Grayscale, Resize, Compose, CenterCrop
+from torchvision.transforms import ToTensor, Grayscale, Resize, Compose, Normalize
+from torchmetrics import Recall, Precision, Accuracy, F1Score, ConfusionMatrix
 from Transforms import ThresholdTransform
 from torch import nn, optim
 from torch.optim.lr_scheduler import MultiStepLR
@@ -19,26 +20,35 @@ import os
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
-data_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/data/three_10k"
-weights_folder = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/"
+data_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/data/3_10k"
+weights_folder = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/weights/"
 
 criterion = None
 criterion_2 = None
 
+recall = None
+precision = None
+acc = None
+f1 = None
+confmat = None
+
 parser = argparse.ArgumentParser(description='workspace-cobs')
 parser.add_argument('--data', type=str, default=data_path, help='location of dataset')
 parser.add_argument('--weights-folder', type=str, default=weights_folder, help='location to save weights')
-parser.add_argument('--weights-file', type=str, default='./02-11-22-11_51_SEGNET-l2-1.pth', help='weights file name')
-parser.add_argument('--use-last-checkpoint', default=False, action='store_true', help='use last checkpoint')
+parser.add_argument('--weights-file', type=str, default='./weights_3_10k/10-12-22-03_29_SEGNET-l2_l1-1.pth', help='weights file name')
+parser.add_argument('--use-last-checkpoint', default=True, action='store_true', help='use last checkpoint')
 parser.add_argument('--num-obstacles', type=int, default=1, help='number of obstacles in dataset images')
 parser.add_argument('--loss-fn', type=str, default='l2_l1',
                     help='Loss function to train on. supported options: l1,l2,l2_l1,bce')
 parser.add_argument('--generate-images-interval', type=int, default=1)
-parser.add_argument('--num-epochs', type=int, default=250, help='num epochs')
+parser.add_argument('--num-epochs', type=int, default=3, help='num epochs')
 parser.add_argument('--seed', type=int, default=26, help='seed')
 parser.add_argument('--cuda', default=True, action='store_true', help='cuda')
 parser.add_argument('--batch_size', type=int, default=5, help='training batch size')
 parser.add_argument('--log-interval', type=int, default=100, metavar='N', help='report interval')
+parser.add_argument('--is-train', default=False, action='store_false', help='do training')
+parser.add_argument('--num_images-to-generate-from-test', type=int, default=20,
+                    help='number of images to generate from test set')
 
 writer = SummaryWriter()
 
@@ -51,10 +61,20 @@ def save_img(img, file_name):
     plt.close()
 
 
+def generate_metric_stats(predicted_config_spaces, config_spaces):
+    pred_transformed = (predicted_config_spaces > .5).float()
+    r = recall(pred_transformed, config_spaces)
+    p = precision(pred_transformed, config_spaces)
+    a = acc(pred_transformed, config_spaces)
+    f = f1(pred_transformed, config_spaces)
+    return r.item(), p.item(), a.item(), f.item()
+
+
 def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hyperparams):
     model.train()
     total_train_loss_log = 0
     total_train_loss = 0
+    recalls, precisions, accs, f1s = [], [], [], []
     i = 0
     start_time = time.time()
     for batch in train_data:
@@ -75,17 +95,28 @@ def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hy
         opt.step()
         total_train_loss_log += loss.item()
         total_train_loss += loss.item()
-
+        #
+        # r, p, a, f = generate_metric_stats(predicted_config_spaces, config_spaces)
+        # recalls.append(r)
+        # precisions.append(p)
+        # accs.append(a)
+        # f1s.append(f)
         if i % hyperparams.log_interval == 0:
             curr_loss = total_train_loss_log / hyperparams.log_interval
             elapsed = time.time() - start_time
             if criterion_2:
                 loss_fn = 'l2' if epoch % 2 == 1 else 'l1'
-                print('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | {} {:5.2f}'.format(epoch, i,
-                                                                                                   len(train_data),
-                                                                                                   elapsed * 1000 / hyperparams.log_interval,
-                                                                                                   loss_fn,
-                                                                                                   curr_loss))
+                print('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | {} {:5.2f} | Precision {:5.3f} | '
+                      'Recall {:5.3f} | F1Score {:5.3f} | Accuracy {:5.3f} '.format(epoch, i,
+                                                                                    len(train_data),
+                                                                                    elapsed * 1000 / hyperparams.log_interval,
+                                                                                    loss_fn,
+                                                                                    curr_loss,
+                                                                                    0,
+                                                                                    0,
+                                                                                    0,
+                                                                                    0
+                                                                                    ))
             else:
                 print('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | loss {:5.2f}'.format(epoch, i,
                                                                                                      len(train_data),
@@ -94,12 +125,18 @@ def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hy
             total_train_loss_log = 0
             start_time = time.time()
 
-        writer.add_scalar('training_loss', total_train_loss / len(train_data), epoch)
+    writer.add_scalar('training_loss', total_train_loss / len(train_data), epoch)
+    # writer.add_scalar('training_precision', np.mean(precisions), epoch)
+    # writer.add_scalar('training_recall', np.mean(recalls), epoch)
+    # writer.add_scalar('training_acc', np.mean(accs), epoch)
+    # writer.add_scalar('training_f1_score', np.mean(f1s), epoch)
 
 
 def evaluate(model: nn.Module, data, device):
     model.eval()
     total_loss = 0.0
+    recalls, precisions, accs, f1s = [], [], [], []
+    preds, actual = [], []
     with torch.no_grad():
         for batch in data:
             workspaces, config_spaces = batch['workspace'], batch['cobs']
@@ -107,8 +144,17 @@ def evaluate(model: nn.Module, data, device):
             config_spaces = config_spaces.to(device)
             predicted_config_spaces = model(workspaces)
             total_loss += criterion(predicted_config_spaces, config_spaces)
-
-    return total_loss / len(data)
+            r, p, a, f = generate_metric_stats(predicted_config_spaces, config_spaces)
+            recalls.append(r)
+            precisions.append(p)
+            accs.append(a)
+            f1s.append(f)
+            preds.append((predicted_config_spaces > .5).float().flatten())
+            actual.append(config_spaces.flatten())
+        preds = torch.cat(preds,dim=-1).cpu()
+        actual = torch.cat(actual,dim=-1).cpu()
+    print(confmat(preds,actual))
+    return total_loss / len(data), np.mean(recalls), np.mean(precisions), np.mean(accs), np.mean(f1s)
 
 
 def generate_workspace_configspace_pair(model, epoch, device, validation, hyperparams):
@@ -123,6 +169,48 @@ def generate_workspace_configspace_pair(model, epoch, device, validation, hyperp
         break
 
 
+def generate_test_images(model, test_dataloader, device, num_images_to_generate_from_test):
+    num_images = 0
+    for batch in test_dataloader:
+        workspaces, config_spaces, image_ids = batch['workspace'][:2], batch['cobs'][:2], batch['id'][:2]
+        workspaces = workspaces.to(device)
+        predicted_config_spaces = model(workspaces)
+        fig = plt.figure(figsize=(20, 30))
+        i = 1
+        for workspace, config_space, predicted_config_space, image_id in zip(workspaces, config_spaces,
+                                                                             predicted_config_spaces, image_ids):
+            ax1 = fig.add_subplot(2, 3, i)
+            workspace_img = workspace.cpu().detach().numpy()
+            ax1.set_frame_on(False)
+            ax1.imshow(np.transpose(workspace_img, (1, 2, 0)), cmap='gray')
+            ax1.set_title(f"Workspace-{image_id}")
+            ax1.axis("off")
+            i += 1
+
+            ax2 = fig.add_subplot(2, 3, i)
+            configspace_img = config_space.cpu().detach().numpy()
+            ax2.imshow(np.transpose(configspace_img, (1, 2, 0)), cmap='gray', extent=[-7, 360, -7, 360])
+            ax2.set_frame_on(False)
+            ax2.set_title(f"configspace-{image_id}")
+            ax2.set_xlabel("Q1")
+            ax2.set_ylabel("Q2")
+            i += 1
+
+            ax3 = fig.add_subplot(2, 3, i)
+            pred_img = predicted_config_space.cpu().detach().numpy()
+            ax3.set_frame_on(False)
+            ax3.imshow(np.transpose(pred_img, (1, 2, 0)), cmap='gray', extent=[-7, 360, -7, 360])
+            ax3.set_title(f"predicted-{image_id}")
+            ax3.set_xlabel("Q1")
+            ax3.set_ylabel("Q2")
+            i += 1
+        plt.tight_layout()
+        plt.savefig(f"generated-imgs-{num_images}")
+        num_images += len(workspaces)
+        if num_images == num_images_to_generate_from_test:
+            return
+
+
 def generate_workspace_configspace_pair_tensorboard(model, epoch, device, validation, hyperparams):
     for batch in validation:
         workspaces, config_spaces, image_ids = batch['workspace'][:2], batch['cobs'][:2], batch['id'][:2]
@@ -134,6 +222,7 @@ def generate_workspace_configspace_pair_tensorboard(model, epoch, device, valida
                                                                              predicted_config_spaces, image_ids):
             ax1 = fig.add_subplot(2, 3, i)
             workspace_img = workspace.cpu().detach().numpy()
+            ax1.set_frame_on(False)
             ax1.imshow(np.transpose(workspace_img, (1, 2, 0)), cmap='gray')
             ax1.set_title(f"Workspace-{image_id}")
             ax1.axis("off")
@@ -141,17 +230,22 @@ def generate_workspace_configspace_pair_tensorboard(model, epoch, device, valida
 
             ax2 = fig.add_subplot(2, 3, i)
             configspace_img = config_space.cpu().detach().numpy()
-            ax2.imshow(np.transpose(configspace_img, (1, 2, 0)), cmap='gray')
+            ax2.imshow(np.transpose(configspace_img, (1, 2, 0)), cmap='gray',extent=[-7,360,-7,360])
+            ax2.set_frame_on(False)
             ax2.set_title(f"configspace-{image_id}")
-            ax2.axis("off")
+            ax2.set_xlabel("Q1")
+            ax2.set_ylabel("Q2")
             i += 1
 
             ax3 = fig.add_subplot(2, 3, i)
             pred_img = predicted_config_space.cpu().detach().numpy()
-            ax3.imshow(np.transpose(pred_img, (1, 2, 0)), cmap='gray')
+            ax3.set_frame_on(False)
+            ax3.imshow(np.transpose(pred_img, (1, 2, 0)), cmap='gray',extent=[-7,360,-7,360])
             ax3.set_title(f"predicted-{image_id}")
-            ax3.axis("off")
+            ax3.set_xlabel("Q1")
+            ax3.set_ylabel("Q2")
             i += 1
+        plt.box(False)
         plt.tight_layout()
         return fig
 
@@ -164,13 +258,17 @@ def train(model: nn.Module, opt: torch.optim, scheduler: MultiStepLR, train_data
     while epoch <= hyperparams.num_epochs + 1:
         train_epoch(model, opt, train_data, epoch, device, hyperparams)
         scheduler.step()
-        val_loss = evaluate(model, val_data, device)
+        val_loss, recall, precision, acc, f1 = evaluate(model, val_data, device)
         writer.add_scalar('validation_loss', val_loss, epoch)
+        writer.add_scalar('validation_recall', recall, epoch)
+        writer.add_scalar('validation_precision', precision, epoch)
+        writer.add_scalar('validation_acc', acc, epoch)
+        writer.add_scalar('validation_f1', f1, epoch)
         writer.flush()
         print("=" * 89)
         print('End of epoch {} | val loss {:5.2f} | lr {:5.5f}'.format(epoch, val_loss, scheduler.get_last_lr()[0]))
         if epoch % hyperparams.generate_images_interval == 0:
-            writer.add_figure('workspace and true configspace vs predicted',
+            writer.add_figure(f'workspace and true configspace vs predicted epoch-{epoch}',
                               generate_workspace_configspace_pair_tensorboard(model, epoch, device, val_data,
                                                                               hyperparams),
                               global_step=epoch)
@@ -224,7 +322,7 @@ if __name__ == '__main__':
     dataset = ConfigSpaceDataset(data_path, workspace_transform=workspace_transforms,
                                  configspace_transform=configspace_transforms)
 
-    train_size = int(0.4 * len(dataset))
+    train_size = int(0.7 * len(dataset))
     val_size = int(.15 * len(dataset))
     test_size = len(dataset) - (train_size + val_size)
 
@@ -246,6 +344,12 @@ if __name__ == '__main__':
     print(f"Training on {hyperparams.data}")
     print(F"Training on objective {hyperparams.loss_fn}")
 
+    recall = Recall(task="binary", average="macro").to(device)
+    precision = Precision(task="binary", average="macro").to(device)
+    acc = Accuracy(task="binary", average="macro").to(device)
+    f1 = F1Score(task="binary", average="macro").to(device)
+    confmat = ConfusionMatrix(task='binary', num_classes=2, normalize='true')
+
     model = SegNet()
     if hyperparams.use_last_checkpoint:
         print(f"Loading from last checkpoint file: {hyperparams.weights_file}")
@@ -257,18 +361,25 @@ if __name__ == '__main__':
     opt = optim.Adadelta(model.parameters(), lr=.01)
     scheduler = MultiStepLR(opt, milestones=[25, 50, 75, 100, 125, 150, 175, 200, 225], gamma=.75)
 
-    print(scheduler.get_last_lr()[0])
-    try:
-        print('-' * 100)
-        print("Starting training...")
-        train(model, opt, scheduler, train_dataloader, val_dataloader, device, hyperparams)
-    except KeyboardInterrupt:
-        print('=' * 100)
-        print("Exiting from training...")
-    writer.close()
+    if hyperparams.is_train:
+        print(scheduler.get_last_lr()[0])
+        try:
+            print('-' * 100)
+            print("Starting training...")
+            train(model, opt, scheduler, train_dataloader, val_dataloader, device, hyperparams)
+        except KeyboardInterrupt:
+            print('=' * 100)
+            print("Exiting from training...")
+        writer.close()
 
-    test_loss = evaluate(model, test_dataloader, device)
+    generate_test_images(model, test_dataloader, device, hyperparams.num_images_to_generate_from_test)
+    test_loss, recall, precision, acc, f1 = evaluate(model, test_dataloader, device)
+    writer.add_scalar('test_loss', test_loss)
+    writer.add_scalar('test_recall', recall)
+    writer.add_scalar('test_precision', precision)
+    writer.add_scalar('test_acc', acc)
+    writer.add_scalar('test_f1', f1)
     print("=" * 100)
-    print("| test loss {:5.2f}".format(test_loss))
+    print("| test loss {:5.5f} | recall {:5.5f} | precision {:5.5f} | acc {:5.5f} | f1 {:5.5f}|".format(test_loss,recall,precision,acc,f1))
     print("=" * 100)
     generate_workspace_configspace_pair(model, hyperparams.num_epochs + 1, device, test_dataloader, hyperparams)
