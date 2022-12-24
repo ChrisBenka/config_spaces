@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+## Reference : https://github.com/vinceecws/SegNet_PyTorch
 
 class SegNet(nn.Module):
 
@@ -108,27 +109,22 @@ class SegNet(nn.Module):
         self.threshold = torch.nn.Threshold(0,0)
 
     def forward(self, x):
-        # ENCODE LAYERS
-        # Stage 1
         x = F.relu(self.BNEn11(self.ConvEn11(x)))
         x = F.relu(self.BNEn12(self.ConvEn12(x)))
         x, ind1 = self.MaxEn(x)
         size1 = x.size()
 
-        # Stage 2
         x = F.relu(self.BNEn21(self.ConvEn21(x)))
         x = F.relu(self.BNEn22(self.ConvEn22(x)))
         x, ind2 = self.MaxEn(x)
         size2 = x.size()
 
-        # Stage 3
         x = F.relu(self.BNEn31(self.ConvEn31(x)))
         x = F.relu(self.BNEn32(self.ConvEn32(x)))
         x = F.relu(self.BNEn33(self.ConvEn33(x)))
         x, ind3 = self.MaxEn(x)
         size3 = x.size()
 
-        # Stage 4
         x = F.relu(self.BNEn41(self.ConvEn41(x)))
         x = F.relu(self.BNEn42(self.ConvEn42(x)))
         x = F.relu(self.BNEn43(self.ConvEn43(x)))
@@ -142,22 +138,18 @@ class SegNet(nn.Module):
         x, ind5 = self.MaxEn(x)
         size5 = x.size()
 
-        # Stage 6
         x = F.relu(self.BNEn61(self.ConvEn61(x)))
         x = F.relu(self.BNEn62(self.ConvEn62(x)))
         x = F.relu(self.BNEn63(self.ConvEn63(x)))
         x, ind6 = self.MaxEn(x)
         size6 = x.size()
 
-        # Stage 7
         x = F.relu(self.BNEn71(self.ConvEn71(x)))
         x = F.relu(self.BNEn72(self.ConvEn72(x)))
         x = F.relu(self.BNEn73(self.ConvEn73(x)))
         x, ind7 = self.MaxEn(x)
         size7 = x.size()
 
-        # DECODE LAYERS
-        # Stage 7
         x = self.MaxDe(x, ind7, output_size=size6)
         x = F.relu(self.BNEn73(self.ConvDe73(x)))
         x = F.relu(self.BNDe72(self.ConvDe72(x)))
@@ -168,30 +160,25 @@ class SegNet(nn.Module):
         x = F.relu(self.BNDe62(self.ConvDe62(x)))
         x = F.relu(self.BNDe61(self.ConvDe61(x)))
 
-        # Stage 5
         x = self.MaxDe(x, ind5, output_size=size4)
         x = F.relu(self.BNDe53(self.ConvDe53(x)))
         x = F.relu(self.BNDe52(self.ConvDe52(x)))
         x = F.relu(self.BNDe51(self.ConvDe51(x)))
 
-        # Stage 4
         x = self.MaxDe(x, ind4, output_size=size3)
         x = F.relu(self.BNDe43(self.ConvDe43(x)))
         x = F.relu(self.BNDe42(self.ConvDe42(x)))
         x = F.relu(self.BNDe41(self.ConvDe41(x)))
 
-        # Stage 3
         x = self.MaxDe(x, ind3, output_size=size2)
         x = F.relu(self.BNDe33(self.ConvDe33(x)))
         x = F.relu(self.BNDe32(self.ConvDe32(x)))
         x = F.relu(self.BNDe31(self.ConvDe31(x)))
 
-        # Stage 2
         x = self.MaxDe(x, ind2, output_size=size1)
         x = F.relu(self.BNDe22(self.ConvDe22(x)))
         x = F.relu(self.BNDe21(self.ConvDe21(x)))
 
-        # Stage 1
         x = self.MaxDe(x, ind1)
         x = F.relu(self.BNDe12(self.ConvDe12(x)))
         x = self.ConvDe11(x)
