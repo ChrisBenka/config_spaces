@@ -164,15 +164,38 @@ class Plotter:
         start_image, end_image = image_config
         if start_image == 0:
             for i in range(1):
-                obstacles = self.generate_obstacle_origins()
+                obstacles = self.generate_obstacles()
                 self.plot_workspace(obstacles, i, True, include_labels=True, file_nm="workspace_base")
                 cobs = self.calculate_cobs(obstacles)
                 self.plot_cobs(cobs, i, True, True, file_nm="configspace_base")
         for i in range(start_image, end_image + 1):
-            obstacles = self.generate_obstacle_origins()
+            obstacles = self.generate_obstacles()
             self.plot_workspace(obstacles, i, False, include_labels=False)
             cobs = self.calculate_cobs(obstacles)
             self.plot_cobs(cobs, i, True, False)
+
+    def generate_obstacles(self):
+        obstacles = []
+        can_add = True
+        while len(obstacles) < self.num_obstacles:
+            origin = tuple([round(random.uniform(-3.5, 3.5), 4) for i in range(2)])
+            if len(obstacles) == 0:
+                obstacle = Point(origin).buffer(self.obstacle_radii)
+            elif len(obstacles) == 1:
+                obstacle = Point(origin).buffer(self.obstacle_radii,cap_style=3)
+            elif len(obstacles) == 2:
+                obstacle = Polygon([
+                    origin,
+                    (origin[0],origin[1]+1),
+                    (origin[0]+1,origin[1])
+                ])
+            for obst in obstacles:
+                if obst.intersects(obstacle):
+                    can_add = False
+                    break
+            if can_add:
+                obstacles.append(obstacle)
+        return obstacles
 
     def generate_obstacle_origins(self):
         obstacle_origins = set([])
