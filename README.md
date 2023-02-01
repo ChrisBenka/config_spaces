@@ -6,7 +6,7 @@
 - The time taken for our prediction of the configuration space image is independent of the number of number and shape of obstacles  
 - Curate 4 datasets for the study of of configuration space images from robotic workspace images.
 
-Paper: Work in Progress. Will submit to IROS 2023.
+## Paper: Work in Progress. Will submit to IROS 2023.
 
 
 ## Model Architecture
