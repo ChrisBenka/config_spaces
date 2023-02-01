@@ -1,4 +1,4 @@
-# config_spaces 
+# Prediction of Configuration Space of Dual-Arm Robot via Convolutional Encoder-Decoders
 
 ## Model Architecture
 <img width="787" alt="image" src="https://user-images.githubusercontent.com/24688175/216159037-a7e124e1-ea0a-41dd-8689-4661c851bde5.png">
