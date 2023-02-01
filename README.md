@@ -1,11 +1,14 @@
 # Prediction of Configuration Space of Dual-Arm Robot via Convolutional Encoder-Decoders
 
+Contributions 
+- First to apply a CNN to predict robotic configuration spaces from robotic worksapces. 
+- Our model learns highly transferable features between robotic workspaces allowing the model to quickly adapt to translations, rotation, and removals of the obstacles from the workspaces.
+
 ## Model Architecture
 <img width="787" alt="image" src="https://user-images.githubusercontent.com/24688175/216159037-a7e124e1-ea0a-41dd-8689-4661c851bde5.png">
 
 ## Dual Arm Robotic Workspace and Config Space
 <img width="400" alt="image" src="https://user-images.githubusercontent.com/24688175/216165596-31ec98a1-89c1-4614-880b-531c32436d9c.png"><img width="500" alt="image" src="https://user-images.githubusercontent.com/24688175/216165557-27140506-bbf3-4a0f-bbcf-9bece0331d1c.png">
-
 
 ## (Workspace, Ground truth config-space, Predicted config space) Triples
 <img width="590" alt="image" src="https://user-images.githubusercontent.com/24688175/216158430-7feb9f57-c633-4077-ba9a-192526a1fb50.png">
