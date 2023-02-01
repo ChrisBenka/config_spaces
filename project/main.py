@@ -20,7 +20,7 @@ import os
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
-data_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/data/3_10k"
+data_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/data/3_shape"
 weights_folder = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/weights/"
 
 criterion = None
@@ -35,18 +35,19 @@ confmat = None
 parser = argparse.ArgumentParser(description='workspace-cobs')
 parser.add_argument('--data', type=str, default=data_path, help='location of dataset')
 parser.add_argument('--weights-folder', type=str, default=weights_folder, help='location to save weights')
-parser.add_argument('--weights-file', type=str, default='./weights_3_10k/10-12-22-03_29_SEGNET-l2_l1-1.pth', help='weights file name')
-parser.add_argument('--use-last-checkpoint', default=True, action='store_true', help='use last checkpoint')
+parser.add_argument('--weights-file', type=str, default='./3_shape/weights/17-01-23-23_44_SEGNET-l2_l1-1.pth', help='weights file name')
+parser.add_argument('--use-last-checkpoint', default=True, action='store_false', help='use last checkpoint')
 parser.add_argument('--num-obstacles', type=int, default=1, help='number of obstacles in dataset images')
+parser.add_argument('--output-imgs-path', type=int, default=1, help='./')
 parser.add_argument('--loss-fn', type=str, default='l2_l1',
                     help='Loss function to train on. supported options: l1,l2,l2_l1,bce')
 parser.add_argument('--generate-images-interval', type=int, default=1)
-parser.add_argument('--num-epochs', type=int, default=3, help='num epochs')
+parser.add_argument('--num-epochs', type=int, default=5, help='num epochs')
 parser.add_argument('--seed', type=int, default=26, help='seed')
 parser.add_argument('--cuda', default=True, action='store_true', help='cuda')
 parser.add_argument('--batch_size', type=int, default=5, help='training batch size')
 parser.add_argument('--log-interval', type=int, default=100, metavar='N', help='report interval')
-parser.add_argument('--is-train', default=False, action='store_false', help='do training')
+parser.add_argument('--is-train', default=False, action='store_true', help='do training')
 parser.add_argument('--num_images-to-generate-from-test', type=int, default=20,
                     help='number of images to generate from test set')
 
@@ -67,7 +68,7 @@ def generate_metric_stats(predicted_config_spaces, config_spaces):
     p = precision(pred_transformed, config_spaces)
     a = acc(pred_transformed, config_spaces)
     f = f1(pred_transformed, config_spaces)
-    return r.item(), p.item(), a.item(), f.item()
+    return r, p, a, f
 
 
 def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hyperparams):
@@ -144,11 +145,14 @@ def evaluate(model: nn.Module, data, device):
             config_spaces = config_spaces.to(device)
             predicted_config_spaces = model(workspaces)
             total_loss += criterion(predicted_config_spaces, config_spaces)
+
+            predicted_config_spaces, config_spaces = predicted_config_spaces.to("cpu"), config_spaces.to("cpu")
             r, p, a, f = generate_metric_stats(predicted_config_spaces, config_spaces)
             recalls.append(r)
             precisions.append(p)
             accs.append(a)
             f1s.append(f)
+
             preds.append((predicted_config_spaces > .5).float().flatten())
             actual.append(config_spaces.flatten())
         preds = torch.cat(preds,dim=-1).cpu()
@@ -175,11 +179,11 @@ def generate_test_images(model, test_dataloader, device, num_images_to_generate_
         workspaces, config_spaces, image_ids = batch['workspace'][:2], batch['cobs'][:2], batch['id'][:2]
         workspaces = workspaces.to(device)
         predicted_config_spaces = model(workspaces)
-        fig = plt.figure(figsize=(20, 30))
+        fig = plt.figure(figsize=(20, 50))
         i = 1
         for workspace, config_space, predicted_config_space, image_id in zip(workspaces, config_spaces,
                                                                              predicted_config_spaces, image_ids):
-            ax1 = fig.add_subplot(2, 3, i)
+            ax1 = fig.add_subplot(2, 5, i)
             workspace_img = workspace.cpu().detach().numpy()
             ax1.set_frame_on(False)
             ax1.imshow(np.transpose(workspace_img, (1, 2, 0)), cmap='gray')
@@ -187,7 +191,7 @@ def generate_test_images(model, test_dataloader, device, num_images_to_generate_
             ax1.axis("off")
             i += 1
 
-            ax2 = fig.add_subplot(2, 3, i)
+            ax2 = fig.add_subplot(2, 5, i)
             configspace_img = config_space.cpu().detach().numpy()
             ax2.imshow(np.transpose(configspace_img, (1, 2, 0)), cmap='gray', extent=[-7, 360, -7, 360])
             ax2.set_frame_on(False)
@@ -196,7 +200,8 @@ def generate_test_images(model, test_dataloader, device, num_images_to_generate_
             ax2.set_ylabel("Q2")
             i += 1
 
-            ax3 = fig.add_subplot(2, 3, i)
+            ax3 = fig.add_subplot(2, 5, i)
+            predicted_config_space = (predicted_config_space > .5).float()
             pred_img = predicted_config_space.cpu().detach().numpy()
             ax3.set_frame_on(False)
             ax3.imshow(np.transpose(pred_img, (1, 2, 0)), cmap='gray', extent=[-7, 360, -7, 360])
@@ -204,12 +209,46 @@ def generate_test_images(model, test_dataloader, device, num_images_to_generate_
             ax3.set_xlabel("Q1")
             ax3.set_ylabel("Q2")
             i += 1
+
+            ax4 = fig.add_subplot(2, 5, i)
+            # 0 would be obstacle 1 would be no obstacle.
+            idxs = np.where(configspace_img.flatten() < pred_img.flatten())
+            missed_collisions = np.ones((1, 512, 512)).flatten()
+            missed_collisions[idxs] = 0
+            missed_collisions = missed_collisions.reshape(1,512,512)
+            ax4.set_frame_on(False)
+            ax4.imshow(np.transpose(missed_collisions, (1, 2, 0)), cmap='gray',extent=[-7, 360, -7, 360])
+            ax4.set_title(f"undetected-collisions-{image_id}")
+            ax4.set_xlabel("Q1")
+            ax4.set_ylabel("Q2")
+            i += 1
+
+            ax5 = fig.add_subplot(2, 5, i)
+            # 0 would be obstacle 1 would be no obstacle.
+            idxs = np.where(configspace_img.flatten() > pred_img.flatten())
+            missed_free = np.ones((1, 512, 512)).flatten()
+            missed_free[idxs] = 0
+            missed_free = missed_free.reshape(1,512,512)
+            ax5.set_frame_on(False)
+            ax5.imshow(np.transpose(missed_free, (1, 2, 0)), cmap='gray',extent=[-7, 360, -7, 360])
+            ax5.set_title(f"undetected-free-{image_id}")
+            ax5.set_xlabel("Q1")
+            ax5.set_ylabel("Q2")
+            i += 1
+
+
         plt.tight_layout()
         plt.savefig(f"generated-imgs-{num_images}")
         num_images += len(workspaces)
         if num_images == num_images_to_generate_from_test:
             return
 
+def get_confusion_matrix_indices(pred,actual):
+    unq = np.array([x + 2*y for x, y in zip(pred,actual)])
+    tp = np.array(np.where(unq == 3)).tolist()[0]
+    fp = np.array(np.where(unq == 1)).tolist()[0]
+    tn = np.array(np.where(unq == 0)).tolist()[0]
+    fn = np.array(np.where(unq == 2)).tolist()[0]
 
 def generate_workspace_configspace_pair_tensorboard(model, epoch, device, validation, hyperparams):
     for batch in validation:
@@ -230,7 +269,7 @@ def generate_workspace_configspace_pair_tensorboard(model, epoch, device, valida
 
             ax2 = fig.add_subplot(2, 3, i)
             configspace_img = config_space.cpu().detach().numpy()
-            ax2.imshow(np.transpose(configspace_img, (1, 2, 0)), cmap='gray',extent=[-7,360,-7,360])
+            ax2.imshow(np.transpose(configspace_img, (1, 2, 0)),extent=[-7,360,-7,360])
             ax2.set_frame_on(False)
             ax2.set_title(f"configspace-{image_id}")
             ax2.set_xlabel("Q1")
@@ -240,7 +279,7 @@ def generate_workspace_configspace_pair_tensorboard(model, epoch, device, valida
             ax3 = fig.add_subplot(2, 3, i)
             pred_img = predicted_config_space.cpu().detach().numpy()
             ax3.set_frame_on(False)
-            ax3.imshow(np.transpose(pred_img, (1, 2, 0)), cmap='gray',extent=[-7,360,-7,360])
+            ax3.imshow(np.transpose(pred_img, (1, 2, 0)),extent=[-7,360,-7,360])
             ax3.set_title(f"predicted-{image_id}")
             ax3.set_xlabel("Q1")
             ax3.set_ylabel("Q2")
@@ -277,9 +316,9 @@ def train(model: nn.Module, opt: torch.optim, scheduler: MultiStepLR, train_data
 
         if val_loss <= best_val_loss:
             best_val_loss = val_loss
-            filename = datetime.now().strftime(
-                f'{hyperparams.weights_folder}/%d-%m-%y-%H_%M_SEGNET-{hyperparams.loss_fn}-{hyperparams.num_obstacles}.pth')
-            torch.save(model.state_dict(), filename)
+        filename = datetime.now().strftime(
+            f'{hyperparams.weights_folder}/%d-%m-%y-%H_%M_SEGNET-{hyperparams.loss_fn}-{hyperparams.num_obstacles}.pth')
+        torch.save(model.state_dict(), filename)
 
 
 def set_critertion(loss_fn):
@@ -344,10 +383,10 @@ if __name__ == '__main__':
     print(f"Training on {hyperparams.data}")
     print(F"Training on objective {hyperparams.loss_fn}")
 
-    recall = Recall(task="binary", average="macro").to(device)
-    precision = Precision(task="binary", average="macro").to(device)
-    acc = Accuracy(task="binary", average="macro").to(device)
-    f1 = F1Score(task="binary", average="macro").to(device)
+    recall = Recall(task="binary", average="macro")
+    precision = Precision(task="binary", average="macro")
+    acc = Accuracy(task="binary", average="macro")
+    f1 = F1Score(task="binary", average="macro")
     confmat = ConfusionMatrix(task='binary', num_classes=2, normalize='true')
 
     model = SegNet()
