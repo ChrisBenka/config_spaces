@@ -4,8 +4,8 @@
 <img width="787" alt="image" src="https://user-images.githubusercontent.com/24688175/216159037-a7e124e1-ea0a-41dd-8689-4661c851bde5.png">
 
 ## Dual Arm Robotic Workspace and Config Space
-<img width="822" alt="image" src="https://user-images.githubusercontent.com/24688175/216165596-31ec98a1-89c1-4614-880b-531c32436d9c.png">
-<img width="1035" alt="image" src="https://user-images.githubusercontent.com/24688175/216165557-27140506-bbf3-4a0f-bbcf-9bece0331d1c.png">
+<img width="500" alt="image" src="https://user-images.githubusercontent.com/24688175/216165596-31ec98a1-89c1-4614-880b-531c32436d9c.png">
+<img width="500" alt="image" src="https://user-images.githubusercontent.com/24688175/216165557-27140506-bbf3-4a0f-bbcf-9bece0331d1c.png">
 
 
 ## (Workspace, Ground truth config-space, Predicted config space) Triples
