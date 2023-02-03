@@ -3,7 +3,7 @@
 ## Contributions 
 - First to apply a CNN to predict robotic configuration spaces from robotic worksapces. 
 - Our model learns highly transferable features between robotic workspaces allowing the model to quickly adapt to translation, rotation, and removal of the obstacles from the workspaces.
-- The time taken for our prediction of the configuration space image is independent of the number of number and shape of obstacles  
+- The time taken for our prediction of the configuration space image is independent of the number and shape of obstacles  
 - Curate 4 datasets for the study of of configuration space images from robotic workspace images.
 
 ## Paper: Work in Progress. Will submit to IROS 2023.
