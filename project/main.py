@@ -1,6 +1,6 @@
 import time
 import argparse
-from model import SegNet
+from model import Model
 from dataset import ConfigSpaceDataset
 from torchvision import transforms
 from torchvision.transforms import ToTensor, Grayscale, Resize, Compose, Normalize
@@ -9,7 +9,7 @@ from Transforms import ThresholdTransform
 from torch import nn, optim
 from torch.optim.lr_scheduler import MultiStepLR
 import matplotlib
-
+from tqdm import tqdm
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
@@ -21,7 +21,7 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
 data_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/data/3_shape"
-weights_folder = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/weights/"
+weights_folder = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/weights1/"
 
 criterion = None
 criterion_2 = None
@@ -35,24 +35,25 @@ confmat = None
 parser = argparse.ArgumentParser(description='workspace-cobs')
 parser.add_argument('--data', type=str, default=data_path, help='location of dataset')
 parser.add_argument('--weights-folder', type=str, default=weights_folder, help='location to save weights')
-parser.add_argument('--weights-file', type=str, default='./3_shape/weights/17-01-23-23_44_SEGNET-l2_l1-1.pth', help='weights file name')
-parser.add_argument('--use-last-checkpoint', default=True, action='store_false', help='use last checkpoint')
-parser.add_argument('--num-obstacles', type=int, default=1, help='number of obstacles in dataset images')
+parser.add_argument('--weights-file', type=str, default='./3_shape/weights/weights/07-02-23-22_17_SEGNET-l2-3.pth', help='weights file name')
+parser.add_argument('--use-last-checkpoint', default=False, action='store_false', help='use last checkpoint')
+parser.add_argument('--num-obstacles', type=int, default=3, help='number of obstacles in dataset images')
 parser.add_argument('--output-imgs-path', type=int, default=1, help='./')
-parser.add_argument('--loss-fn', type=str, default='l2_l1',
+parser.add_argument('--loss-fn', type=str, default='l2',
                     help='Loss function to train on. supported options: l1,l2,l2_l1,bce')
 parser.add_argument('--generate-images-interval', type=int, default=1)
-parser.add_argument('--num-epochs', type=int, default=5, help='num epochs')
+parser.add_argument('--num-epochs', type=int, default=250, help='num epochs')
 parser.add_argument('--seed', type=int, default=26, help='seed')
 parser.add_argument('--cuda', default=True, action='store_true', help='cuda')
 parser.add_argument('--batch_size', type=int, default=5, help='training batch size')
 parser.add_argument('--log-interval', type=int, default=100, metavar='N', help='report interval')
-parser.add_argument('--is-train', default=False, action='store_true', help='do training')
+parser.add_argument('--is-train', default=True, action='store_true', help='do training')
 parser.add_argument('--num_images-to-generate-from-test', type=int, default=20,
                     help='number of images to generate from test set')
 
 writer = SummaryWriter()
 
+threshold = .90
 
 def save_img(img, file_name):
     npimg = img.cpu().detach().numpy()
@@ -73,9 +74,7 @@ def generate_metric_stats(predicted_config_spaces, config_spaces):
 
 def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hyperparams):
     model.train()
-    total_train_loss_log = 0
     total_train_loss = 0
-    recalls, precisions, accs, f1s = [], [], [], []
     i = 0
     start_time = time.time()
     for batch in train_data:
@@ -84,42 +83,21 @@ def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hy
         workspaces = workspaces.to(device)
         config_spaces = config_spaces.to(device)
         opt.zero_grad()
-        predicted_config_spaces = model(workspaces)
-        if criterion_2:
-            if epoch % 2 == 1:
-                loss = criterion(predicted_config_spaces, config_spaces)
-            else:
-                loss = criterion_2(predicted_config_spaces, config_spaces)
-        else:
-            loss = criterion(predicted_config_spaces, config_spaces)
+
+        workspace_encoded = model.conv_encoder(workspaces)
+        for j in range(5):
+            configurations = torch.randint(0,360,(5,64800,1,1)).to(device)
+            preds = model(workspace_encoded,configurations)
+            actual = config_spaces[configurations]
+            loss = criterion(preds,actual)
         loss.backward()
         opt.step()
         total_train_loss_log += loss.item()
         total_train_loss += loss.item()
-        #
-        # r, p, a, f = generate_metric_stats(predicted_config_spaces, config_spaces)
-        # recalls.append(r)
-        # precisions.append(p)
-        # accs.append(a)
-        # f1s.append(f)
         if i % hyperparams.log_interval == 0:
             curr_loss = total_train_loss_log / hyperparams.log_interval
             elapsed = time.time() - start_time
-            if criterion_2:
-                loss_fn = 'l2' if epoch % 2 == 1 else 'l1'
-                print('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | {} {:5.2f} | Precision {:5.3f} | '
-                      'Recall {:5.3f} | F1Score {:5.3f} | Accuracy {:5.3f} '.format(epoch, i,
-                                                                                    len(train_data),
-                                                                                    elapsed * 1000 / hyperparams.log_interval,
-                                                                                    loss_fn,
-                                                                                    curr_loss,
-                                                                                    0,
-                                                                                    0,
-                                                                                    0,
-                                                                                    0
-                                                                                    ))
-            else:
-                print('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | loss {:5.2f}'.format(epoch, i,
+            print('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | loss {:5.2f}'.format(epoch, i,
                                                                                                      len(train_data),
                                                                                                      elapsed * 1000 / hyperparams.log_interval,
                                                                                                      curr_loss))
@@ -127,11 +105,6 @@ def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hy
             start_time = time.time()
 
     writer.add_scalar('training_loss', total_train_loss / len(train_data), epoch)
-    # writer.add_scalar('training_precision', np.mean(precisions), epoch)
-    # writer.add_scalar('training_recall', np.mean(recalls), epoch)
-    # writer.add_scalar('training_acc', np.mean(accs), epoch)
-    # writer.add_scalar('training_f1_score', np.mean(f1s), epoch)
-
 
 def evaluate(model: nn.Module, data, device):
     model.eval()
@@ -139,7 +112,8 @@ def evaluate(model: nn.Module, data, device):
     recalls, precisions, accs, f1s = [], [], [], []
     preds, actual = [], []
     with torch.no_grad():
-        for batch in data:
+        i = 0
+        for batch in tqdm(data):
             workspaces, config_spaces = batch['workspace'], batch['cobs']
             workspaces = workspaces.to(device)
             config_spaces = config_spaces.to(device)
@@ -152,9 +126,29 @@ def evaluate(model: nn.Module, data, device):
             precisions.append(p)
             accs.append(a)
             f1s.append(f)
+            pred = (predicted_config_spaces >= threshold).float()
+            indices_where_1 = np.transpose(np.argwhere(pred == 1))
 
-            preds.append((predicted_config_spaces > .5).float().flatten())
+            def majority_is_collision(idx,pred):
+                x_offsets = [1,0,1,0,1,-1,-1,1]
+                y_offsets = [0,1,0,1,1,1,-1,-1]
+                num_collisions = 0
+                num_free = 0
+                for x_offset,y_offset in zip(x_offsets,y_offsets):
+                    if 0 <= tuple(idx)[-2] + x_offset < 512 and 0 <= tuple(idx)[-1] + y_offset < 512:
+                        if pred[tuple(idx + torch.tensor([0,0,x_offset,y_offset]))] == 1:
+                            num_free += 1
+                        else:
+                            num_collisions += 1
+                return  num_collisions >= 2* num_free
+            # for idx in indices_where_1:
+            #     if majority_is_collision(idx,pred):
+            #         pred[tuple(idx)] = 0
+            preds.append(pred.flatten())
             actual.append(config_spaces.flatten())
+            # if i == 5:
+            #     break
+            # i+=1
         preds = torch.cat(preds,dim=-1).cpu()
         actual = torch.cat(actual,dim=-1).cpu()
     print(confmat(preds,actual))
@@ -201,7 +195,7 @@ def generate_test_images(model, test_dataloader, device, num_images_to_generate_
             i += 1
 
             ax3 = fig.add_subplot(2, 5, i)
-            predicted_config_space = (predicted_config_space > .5).float()
+            predicted_config_space = (predicted_config_space >= threshold).float()
             pred_img = predicted_config_space.cpu().detach().numpy()
             ax3.set_frame_on(False)
             ax3.imshow(np.transpose(pred_img, (1, 2, 0)), cmap='gray', extent=[-7, 360, -7, 360])
@@ -269,7 +263,7 @@ def generate_workspace_configspace_pair_tensorboard(model, epoch, device, valida
 
             ax2 = fig.add_subplot(2, 3, i)
             configspace_img = config_space.cpu().detach().numpy()
-            ax2.imshow(np.transpose(configspace_img, (1, 2, 0)),extent=[-7,360,-7,360])
+            ax2.imshow(np.transpose(configspace_img, (1, 2, 0)),cmap='gray',extent=[-7,360,-7,360])
             ax2.set_frame_on(False)
             ax2.set_title(f"configspace-{image_id}")
             ax2.set_xlabel("Q1")
@@ -277,9 +271,10 @@ def generate_workspace_configspace_pair_tensorboard(model, epoch, device, valida
             i += 1
 
             ax3 = fig.add_subplot(2, 3, i)
+            predicted_config_space = (predicted_config_space >= threshold).float()
             pred_img = predicted_config_space.cpu().detach().numpy()
             ax3.set_frame_on(False)
-            ax3.imshow(np.transpose(pred_img, (1, 2, 0)),extent=[-7,360,-7,360])
+            ax3.imshow(np.transpose(pred_img, (1, 2, 0)),cmap='gray',extent=[-7,360,-7,360])
             ax3.set_title(f"predicted-{image_id}")
             ax3.set_xlabel("Q1")
             ax3.set_ylabel("Q2")
@@ -316,9 +311,9 @@ def train(model: nn.Module, opt: torch.optim, scheduler: MultiStepLR, train_data
 
         if val_loss <= best_val_loss:
             best_val_loss = val_loss
-        filename = datetime.now().strftime(
-            f'{hyperparams.weights_folder}/%d-%m-%y-%H_%M_SEGNET-{hyperparams.loss_fn}-{hyperparams.num_obstacles}.pth')
-        torch.save(model.state_dict(), filename)
+            filename = datetime.now().strftime(
+                f'{hyperparams.weights_folder}/%d-%m-%y-%H_%M_SEGNET-{hyperparams.loss_fn}-{hyperparams.num_obstacles}.pth')
+            torch.save(model.state_dict(), filename)
 
 
 def set_critertion(loss_fn):
@@ -340,7 +335,7 @@ def get_transforms(loss_fn):
     w_transform = Compose([ToTensor(), get_rid_alpha, Resize((512, 512)), Grayscale(), ThresholdTransform(thr_255=240)])
     c_transform = Compose([
         transforms.ToTensor(),
-        Resize((512, 512)),
+        Resize((256, 256)),
         get_rid_alpha,
         transforms.Grayscale(),
         ThresholdTransform(thr_255=240)
@@ -365,14 +360,14 @@ if __name__ == '__main__':
     val_size = int(.15 * len(dataset))
     test_size = len(dataset) - (train_size + val_size)
 
-    train_dataset, val_size, test_dataset = torch.utils.data.random_split(dataset, [train_size, val_size, test_size])
+    train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, val_size, test_size])
 
     save_img(train_dataset[0]['workspace'], "test-workspace")
     save_img(train_dataset[0]['cobs'], "test-cobs")
 
     train_dataloader = DataLoader(train_dataset, batch_size=hyperparams.batch_size, shuffle=False)
-    val_dataloader = DataLoader(train_dataset, batch_size=hyperparams.batch_size, shuffle=False)
-    test_dataloader = DataLoader(test_dataset, batch_size=hyperparams.batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=hyperparams.batch_size, shuffle=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=5, shuffle=False)
 
     if hyperparams.cuda and torch.cuda.is_available():
         device = torch.device("cuda")
@@ -389,7 +384,8 @@ if __name__ == '__main__':
     f1 = F1Score(task="binary", average="macro")
     confmat = ConfusionMatrix(task='binary', num_classes=2, normalize='true')
 
-    model = SegNet()
+    model = Model(256*256,2)
+
     if hyperparams.use_last_checkpoint:
         print(f"Loading from last checkpoint file: {hyperparams.weights_file}")
         model.load_state_dict(torch.load(hyperparams.weights_file))
@@ -397,8 +393,9 @@ if __name__ == '__main__':
     total_params = sum(x.data.nelement() for x in model.parameters())
     print("Total number of params: {}".format(total_params))
     model = model.to(device)
+
     opt = optim.Adadelta(model.parameters(), lr=.01)
-    scheduler = MultiStepLR(opt, milestones=[25, 50, 75, 100, 125, 150, 175, 200, 225], gamma=.75)
+    scheduler = MultiStepLR(opt, milestones=[15, 30, 45, 60, 75,90,105], gamma=.75)
 
     if hyperparams.is_train:
         print(scheduler.get_last_lr()[0])
@@ -421,4 +418,4 @@ if __name__ == '__main__':
     print("=" * 100)
     print("| test loss {:5.5f} | recall {:5.5f} | precision {:5.5f} | acc {:5.5f} | f1 {:5.5f}|".format(test_loss,recall,precision,acc,f1))
     print("=" * 100)
-    generate_workspace_configspace_pair(model, hyperparams.num_epochs + 1, device, test_dataloader, hyperparams)
+    # generate_workspace_configspace_pair(model, hyperparams.num_epochs + 1, device, test_dataloader, hyperparams)

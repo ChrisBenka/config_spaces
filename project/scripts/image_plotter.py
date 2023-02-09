@@ -9,7 +9,7 @@ from utils import round_point, round_polygon, round_line_string, midpoint
 import random
 
 plt.ioff()
-
+import numpy as np
 
 class Plotter:
     def __init__(self, args):
@@ -38,7 +38,7 @@ class Plotter:
         self.include_self_collision = args.include_self_collision
         self.include_axis = args.include_axis
 
-        self.q1 = [0, 360]
+        self.q1 = [0, 359]
         self.q2 = [0, -359]
 
     def plot_workspace(self, obstacles, plot_id, include_robot=False, q1=0, q2=0, include_labels=False,
@@ -104,12 +104,12 @@ class Plotter:
 
             for j in range(self.q2[0], self.q2[1] - 1, -1):
                 if self.include_self_collision and 170 <= abs(j) <= 190:
-                    c_pts.append((i, abs(j), 3))
+                    c_pts.append((i, abs(j)))
                     continue
                 c_arm_2_rotated = round_polygon(affinity.rotate(c_upper_arm, j, c_upper_arm_joint))
                 for obs_id, o in enumerate(obstacles):
                     if c_arm_2_rotated.intersects(o) or c_arm_1_rotated.intersects(o):
-                        c_pts.append((i, abs(j), obs_id))
+                        c_pts.append((i, abs(j)))
                         break
         return c_pts
 
@@ -145,11 +145,13 @@ class Plotter:
             y_s = list(map(lambda pt: pt[1], c_obs))
             ax.scatter(x_s, y_s, label='c_obs')
 
-        ax.set_xlabel('Q1')
-        ax.set_ylabel('Q2')
 
         if include_labels:
             ax.legend(bbox_to_anchor=(1, 1))
+            ax.set_xlabel('Q1')
+            ax.set_ylabel('Q2')
+        else:
+            ax.axis("off")
         # if not self.include_axis:
         # ax.xaxis.set_visible(False)
         # ax.yaxis.set_visible(False)
@@ -172,29 +174,40 @@ class Plotter:
             obstacles = self.generate_obstacles()
             self.plot_workspace(obstacles, i, False, include_labels=False)
             cobs = self.calculate_cobs(obstacles)
-            self.plot_cobs(cobs, i, True, False)
+            collision_indices = tuple(zip(*cobs))
+            c_space = np.zeros((360,360))
+            c_space[collision_indices] = 1
+            with open(f"{self.configspace_dir}{i}.npy", 'wb') as f:
+                np.save(f,c_space)
 
     def generate_obstacles(self):
         obstacles = []
-        can_add = True
+        origin = None
+        angle = random.randint(0,360)
         while len(obstacles) < self.num_obstacles:
-            origin = tuple([round(random.uniform(-3.5, 3.5), 4) for i in range(2)])
+            can_add = True
+            if not origin:
+                origin = tuple([round(random.uniform(-3.5, 3.5), 4) for i in range(2)])
             if len(obstacles) == 0:
-                obstacle = Point(origin).buffer(self.obstacle_radii)
+                obst = Point(origin).buffer(self.obstacle_radii)
             elif len(obstacles) == 1:
-                obstacle = Point(origin).buffer(self.obstacle_radii,cap_style=3)
+                obst = Point(origin).buffer(self.obstacle_radii,cap_style=3)
+                obst = affinity.rotate(obst, angle, 'center')
             elif len(obstacles) == 2:
-                obstacle = Polygon([
+                obst = Polygon([
                     origin,
                     (origin[0],origin[1]+1),
                     (origin[0]+1,origin[1])
                 ])
-            for obst in obstacles:
-                if obst.intersects(obstacle):
+                obst = affinity.rotate(obst, angle, 'center')
+            for obstacle in obstacles:
+                if obstacle.intersects(obst):
+                    origin = tuple([round(random.uniform(-3.5, 3.5), 2) for i in range(2)])
                     can_add = False
                     break
             if can_add:
-                obstacles.append(obstacle)
+                obstacles.append(obst)
+                origin = None
         return obstacles
 
     def generate_obstacle_origins(self):

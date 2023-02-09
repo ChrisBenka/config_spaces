@@ -1,12 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
 ## Reference : https://github.com/vinceecws/SegNet_PyTorch
 
-class SegNet(nn.Module):
 
+class ConvEncoder(nn.Module):
     def __init__(self, BN_momentum=.5):
-        super(SegNet, self).__init__()
+        super(ConvEncoder, self).__init__()
 
         self.in_chn = 1
         self.out_chn = 1
@@ -57,56 +59,6 @@ class SegNet(nn.Module):
         self.BNEn72 = nn.BatchNorm2d(512, momentum=BN_momentum)
         self.ConvEn73 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
         self.BNEn73 = nn.BatchNorm2d(512, momentum=BN_momentum)
-        self.relu = nn.Tanh()
-
-        self.MaxDe = nn.MaxUnpool2d(2, stride=2)
-
-        self.ConvDe73 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.BNDe73 = nn.BatchNorm2d(512, momentum=BN_momentum)
-        self.ConvDe72 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.BNDe72 = nn.BatchNorm2d(512, momentum=BN_momentum)
-        self.ConvDe71 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.BNDe71 = nn.BatchNorm2d(512, momentum=BN_momentum)
-
-        self.ConvDe63 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.BNDe63 = nn.BatchNorm2d(512, momentum=BN_momentum)
-        self.ConvDe62 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.BNDe62 = nn.BatchNorm2d(512, momentum=BN_momentum)
-        self.ConvDe61 = nn.Conv2d(512, 256, kernel_size=3, padding=1)
-        self.BNDe61 = nn.BatchNorm2d(256, momentum=BN_momentum)
-
-        self.ConvDe53 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.BNDe53 = nn.BatchNorm2d(256, momentum=BN_momentum)
-        self.ConvDe52 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.BNDe52 = nn.BatchNorm2d(256, momentum=BN_momentum)
-        self.ConvDe51 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.BNDe51 = nn.BatchNorm2d(256, momentum=BN_momentum)
-
-        self.ConvDe43 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.BNDe43 = nn.BatchNorm2d(256, momentum=BN_momentum)
-        self.ConvDe42 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.BNDe42 = nn.BatchNorm2d(256, momentum=BN_momentum)
-        self.ConvDe41 = nn.Conv2d(256, 128, kernel_size=3, padding=1)
-        self.BNDe41 = nn.BatchNorm2d(128, momentum=BN_momentum)
-
-        self.ConvDe33 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
-        self.BNDe33 = nn.BatchNorm2d(128, momentum=BN_momentum)
-        self.ConvDe32 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
-        self.BNDe32 = nn.BatchNorm2d(128, momentum=BN_momentum)
-        self.ConvDe31 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
-        self.BNDe31 = nn.BatchNorm2d(128, momentum=BN_momentum)
-
-        self.ConvDe22 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
-        self.BNDe22 = nn.BatchNorm2d(128, momentum=BN_momentum)
-        self.ConvDe21 = nn.Conv2d(128, 64, kernel_size=3, padding=1)
-        self.BNDe21 = nn.BatchNorm2d(64, momentum=BN_momentum)
-
-        self.ConvDe12 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
-        self.BNDe12 = nn.BatchNorm2d(64, momentum=BN_momentum)
-        self.ConvDe11 = nn.Conv2d(64, self.out_chn, kernel_size=3, padding=1)
-        self.BNDe11 = nn.BatchNorm2d(self.out_chn, momentum=BN_momentum)
-
-        self.threshold = torch.nn.Threshold(0,0)
 
     def forward(self, x):
         x = F.relu(self.BNEn11(self.ConvEn11(x)))
@@ -150,36 +102,26 @@ class SegNet(nn.Module):
         x, ind7 = self.MaxEn(x)
         size7 = x.size()
 
-        x = self.MaxDe(x, ind7, output_size=size6)
-        x = F.relu(self.BNEn73(self.ConvDe73(x)))
-        x = F.relu(self.BNDe72(self.ConvDe72(x)))
-        x = F.relu(self.BNDe71(self.ConvDe71(x)))
 
-        x = self.MaxDe(x, ind6, output_size=size5)
-        x = F.relu(self.BNEn63(self.ConvDe63(x)))
-        x = F.relu(self.BNDe62(self.ConvDe62(x)))
-        x = F.relu(self.BNDe61(self.ConvDe61(x)))
-
-        x = self.MaxDe(x, ind5, output_size=size4)
-        x = F.relu(self.BNDe53(self.ConvDe53(x)))
-        x = F.relu(self.BNDe52(self.ConvDe52(x)))
-        x = F.relu(self.BNDe51(self.ConvDe51(x)))
-
-        x = self.MaxDe(x, ind4, output_size=size3)
-        x = F.relu(self.BNDe43(self.ConvDe43(x)))
-        x = F.relu(self.BNDe42(self.ConvDe42(x)))
-        x = F.relu(self.BNDe41(self.ConvDe41(x)))
-
-        x = self.MaxDe(x, ind3, output_size=size2)
-        x = F.relu(self.BNDe33(self.ConvDe33(x)))
-        x = F.relu(self.BNDe32(self.ConvDe32(x)))
-        x = F.relu(self.BNDe31(self.ConvDe31(x)))
-
-        x = self.MaxDe(x, ind2, output_size=size1)
-        x = F.relu(self.BNDe22(self.ConvDe22(x)))
-        x = F.relu(self.BNDe21(self.ConvDe21(x)))
-
-        x = self.MaxDe(x, ind1)
-        x = F.relu(self.BNDe12(self.ConvDe12(x)))
-        x = self.ConvDe11(x)
-        return x
+class Model(nn.Module):
+    def __init__(self, img_dim, num_dof):
+        super(Model, self).__init__()
+        self.conv_encoder = ConvEncoder()
+        self.fc1 = nn.Linear(img_dim + num_dof, 1800)
+        self.fc2 = nn.Linear(1800, 1024)
+        self.fc3 = nn.Linear(1024, 800)
+        self.fc4 = nn.Linear(800, 512)
+        self.fc5 = nn.Linear(512, 256)
+        self.fc6 = nn.Linear(256, 128)
+        self.fc7 = nn.Linear(128, 64)
+        self.fc8 = nn.Linear(64, 1)
+    def forward(self, input_img, degrees_of_freedom):
+        x = torch.concat([torch.flatten(input_img), degrees_of_freedom])
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        x = F.relu(self.fc4(x))
+        x = F.relu(self.fc5(x))
+        x = F.relu(self.fc6(x))
+        x = F.relu(self.fc7(x))
+        return self.fc8(x),input_img
