@@ -9,6 +9,7 @@ from Transforms import ThresholdTransform
 from torch import nn, optim
 from torch.optim.lr_scheduler import MultiStepLR
 import matplotlib
+from tqdm import tqdm
 
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
@@ -35,11 +36,11 @@ confmat = None
 parser = argparse.ArgumentParser(description='workspace-cobs')
 parser.add_argument('--data', type=str, default=data_path, help='location of dataset')
 parser.add_argument('--weights-folder', type=str, default=weights_folder, help='location to save weights')
-parser.add_argument('--weights-file', type=str, default='./3_shape/weights/17-01-23-23_44_SEGNET-l2_l1-1.pth', help='weights file name')
+parser.add_argument('--weights-file', type=str, default='./3_shape/weights/weights/07-02-23-22_17_SEGNET-l2-3.pth', help='weights file name')
 parser.add_argument('--use-last-checkpoint', default=True, action='store_false', help='use last checkpoint')
 parser.add_argument('--num-obstacles', type=int, default=1, help='number of obstacles in dataset images')
 parser.add_argument('--output-imgs-path', type=int, default=1, help='./')
-parser.add_argument('--loss-fn', type=str, default='l2_l1',
+parser.add_argument('--loss-fn', type=str, default='l2',
                     help='Loss function to train on. supported options: l1,l2,l2_l1,bce')
 parser.add_argument('--generate-images-interval', type=int, default=1)
 parser.add_argument('--num-epochs', type=int, default=5, help='num epochs')
@@ -53,6 +54,7 @@ parser.add_argument('--num_images-to-generate-from-test', type=int, default=20,
 
 writer = SummaryWriter()
 
+threshold = .9
 
 def save_img(img, file_name):
     npimg = img.cpu().detach().numpy()
@@ -63,7 +65,7 @@ def save_img(img, file_name):
 
 
 def generate_metric_stats(predicted_config_spaces, config_spaces):
-    pred_transformed = (predicted_config_spaces > .5).float()
+    pred_transformed = (predicted_config_spaces > threshold).float()
     r = recall(pred_transformed, config_spaces)
     p = precision(pred_transformed, config_spaces)
     a = acc(pred_transformed, config_spaces)
@@ -136,10 +138,9 @@ def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hy
 def evaluate(model: nn.Module, data, device):
     model.eval()
     total_loss = 0.0
-    recalls, precisions, accs, f1s = [], [], [], []
     preds, actual = [], []
     with torch.no_grad():
-        for batch in data:
+        for batch in tqdm(data):
             workspaces, config_spaces = batch['workspace'], batch['cobs']
             workspaces = workspaces.to(device)
             config_spaces = config_spaces.to(device)
@@ -147,18 +148,32 @@ def evaluate(model: nn.Module, data, device):
             total_loss += criterion(predicted_config_spaces, config_spaces)
 
             predicted_config_spaces, config_spaces = predicted_config_spaces.to("cpu"), config_spaces.to("cpu")
-            r, p, a, f = generate_metric_stats(predicted_config_spaces, config_spaces)
-            recalls.append(r)
-            precisions.append(p)
-            accs.append(a)
-            f1s.append(f)
 
-            preds.append((predicted_config_spaces > .5).float().flatten())
+            pred_config_spaces = (predicted_config_spaces > threshold).float()
+
+            free_space_indices = (pred_config_spaces == 1).nonzero()
+            x_offset = [0,1,0,-1,1,-1,-1,1]
+            y_offset = [1,0,-1,0,1,1,-1,-1]
+            for free_space_idx in tqdm(free_space_indices):
+                num_collisions = 0
+                for x_off,y_off in zip(x_offset,y_offset):
+                    new_pos = free_space_idx + torch.tensor([0,0,x_off,y_off])
+                    if torch.all(torch.tensor([0,0,0,0]) <= new_pos) and torch.all(new_pos <= torch.tensor([5,1,511,511])):
+                        if pred_config_spaces[tuple(new_pos)] == 0:
+                            num_collisions += 1
+                    if num_collisions >= 3:
+                        pred_config_spaces[tuple(free_space_idx)] = 0
+                        break
+            preds.append(pred_config_spaces.flaten())
             actual.append(config_spaces.flatten())
         preds = torch.cat(preds,dim=-1).cpu()
         actual = torch.cat(actual,dim=-1).cpu()
     print(confmat(preds,actual))
-    return total_loss / len(data), np.mean(recalls), np.mean(precisions), np.mean(accs), np.mean(f1s)
+    r = recall(preds, actual)
+    p = precision(preds, actual)
+    a = acc(preds, actual)
+    f = f1(preds, actual)
+    return total_loss / len(data), r, p, a, f
 
 
 def generate_workspace_configspace_pair(model, epoch, device, validation, hyperparams):
@@ -201,7 +216,7 @@ def generate_test_images(model, test_dataloader, device, num_images_to_generate_
             i += 1
 
             ax3 = fig.add_subplot(2, 5, i)
-            predicted_config_space = (predicted_config_space > .5).float()
+            predicted_config_space = (predicted_config_space > threshold).float()
             pred_img = predicted_config_space.cpu().detach().numpy()
             ax3.set_frame_on(False)
             ax3.imshow(np.transpose(pred_img, (1, 2, 0)), cmap='gray', extent=[-7, 360, -7, 360])
@@ -365,14 +380,14 @@ if __name__ == '__main__':
     val_size = int(.15 * len(dataset))
     test_size = len(dataset) - (train_size + val_size)
 
-    train_dataset, val_size, test_dataset = torch.utils.data.random_split(dataset, [train_size, val_size, test_size])
+    train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, val_size, test_size])
 
     save_img(train_dataset[0]['workspace'], "test-workspace")
     save_img(train_dataset[0]['cobs'], "test-cobs")
 
     train_dataloader = DataLoader(train_dataset, batch_size=hyperparams.batch_size, shuffle=False)
-    val_dataloader = DataLoader(train_dataset, batch_size=hyperparams.batch_size, shuffle=False)
-    test_dataloader = DataLoader(test_dataset, batch_size=hyperparams.batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=hyperparams.batch_size, shuffle=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=2, shuffle=False)
 
     if hyperparams.cuda and torch.cuda.is_available():
         device = torch.device("cuda")
