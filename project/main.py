@@ -10,7 +10,7 @@ from torch import nn, optim
 from torch.optim.lr_scheduler import MultiStepLR
 import matplotlib
 from tqdm import tqdm
-
+import multiprocessing
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
@@ -22,7 +22,7 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
 data_path = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/data/3_shape"
-weights_folder = "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/weights/"
+results_directory =  "/home/chris/Documents/columbia/fall_22/config_space/config_spaces/project/final_results/3_shape"
 
 criterion = None
 criterion_2 = None
@@ -35,27 +35,27 @@ confmat = None
 
 parser = argparse.ArgumentParser(description='workspace-cobs')
 parser.add_argument('--data', type=str, default=data_path, help='location of dataset')
-parser.add_argument('--weights-folder', type=str, default=weights_folder, help='location to save weights')
-parser.add_argument('--weights-file', type=str, default='./3_shape/weights/weights/07-02-23-22_17_SEGNET-l2-3.pth', help='weights file name')
-parser.add_argument('--use-last-checkpoint', default=True, action='store_false', help='use last checkpoint')
-parser.add_argument('--num-obstacles', type=int, default=1, help='number of obstacles in dataset images')
-parser.add_argument('--output-imgs-path', type=int, default=1, help='./')
+parser.add_argument('--weights-folder', type=str, default=results_directory + "/weights", help='location to save weights')
+parser.add_argument('--weights-file', type=str, default='./weights/14-02-23-19_55_SEGNET-l2-1.pth', help='weights file name')
+parser.add_argument('--use-last-checkpoint', default=False, action='store_false', help='use last checkpoint')
+parser.add_argument('--obstacles', type=int, default=3, help='number of obstacles in dataset images')
+parser.add_argument('--output-imgs-path', type=int, default=1, help=results_directory + "/images")
 parser.add_argument('--loss-fn', type=str, default='l2',
                     help='Loss function to train on. supported options: l1,l2,l2_l1,bce')
 parser.add_argument('--generate-images-interval', type=int, default=1)
-parser.add_argument('--num-epochs', type=int, default=5, help='num epochs')
+parser.add_argument('--num-epochs', type=int, default=200, help='num epochs')
 parser.add_argument('--seed', type=int, default=26, help='seed')
 parser.add_argument('--cuda', default=True, action='store_true', help='cuda')
 parser.add_argument('--batch_size', type=int, default=5, help='training batch size')
 parser.add_argument('--log-interval', type=int, default=100, metavar='N', help='report interval')
-parser.add_argument('--is-train', default=False, action='store_true', help='do training')
+parser.add_argument('--is-train', default=True, action='store_true', help='do training')
 parser.add_argument('--num_images-to-generate-from-test', type=int, default=20,
                     help='number of images to generate from test set')
 
-writer = SummaryWriter()
+writer = SummaryWriter(log_dir=results_directory+"/runs")
 
-threshold = .9
-
+threshold = .0
+collision_scale = 1
 def save_img(img, file_name):
     npimg = img.cpu().detach().numpy()
     plt.imshow(np.transpose(npimg, (1, 2, 0)), cmap='gray')
@@ -65,11 +65,14 @@ def save_img(img, file_name):
 
 
 def generate_metric_stats(predicted_config_spaces, config_spaces):
-    pred_transformed = (predicted_config_spaces > threshold).float()
-    r = recall(pred_transformed, config_spaces)
-    p = precision(pred_transformed, config_spaces)
-    a = acc(pred_transformed, config_spaces)
-    f = f1(pred_transformed, config_spaces)
+    pred_config_space = (predicted_config_spaces.flatten() > 0 ).float()
+    config_spaces = (config_spaces.flatten() != -1).float()
+    pred_config_space = pred_config_space.flatten()
+    config_spaces = config_spaces.flatten()
+    r = recall(pred_config_space, config_spaces)
+    p = precision(pred_config_space, config_spaces)
+    a = acc(pred_config_space, config_spaces)
+    f = f1(pred_config_space, config_spaces)
     return r, p, a, f
 
 
@@ -77,7 +80,6 @@ def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hy
     model.train()
     total_train_loss_log = 0
     total_train_loss = 0
-    recalls, precisions, accs, f1s = [], [], [], []
     i = 0
     start_time = time.time()
     for batch in train_data:
@@ -87,23 +89,20 @@ def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hy
         config_spaces = config_spaces.to(device)
         opt.zero_grad()
         predicted_config_spaces = model(workspaces)
+        predicted_config_spaces = torch.nn.functional.tanh(predicted_config_spaces)
+
         if criterion_2:
             if epoch % 2 == 1:
                 loss = criterion(predicted_config_spaces, config_spaces)
             else:
                 loss = criterion_2(predicted_config_spaces, config_spaces)
         else:
-            loss = criterion(predicted_config_spaces, config_spaces)
+            config_spaces.flatten()[(config_spaces.flatten() == 0).nonzero().flatten()] = -1
+            loss = my_loss_fn(predicted_config_spaces,config_spaces)
         loss.backward()
         opt.step()
         total_train_loss_log += loss.item()
         total_train_loss += loss.item()
-        #
-        # r, p, a, f = generate_metric_stats(predicted_config_spaces, config_spaces)
-        # recalls.append(r)
-        # precisions.append(p)
-        # accs.append(a)
-        # f1s.append(f)
         if i % hyperparams.log_interval == 0:
             curr_loss = total_train_loss_log / hyperparams.log_interval
             elapsed = time.time() - start_time
@@ -129,42 +128,42 @@ def train_epoch(model: nn.Module, opt, train_data: DataLoader, epoch, device, hy
             start_time = time.time()
 
     writer.add_scalar('training_loss', total_train_loss / len(train_data), epoch)
-    # writer.add_scalar('training_precision', np.mean(precisions), epoch)
-    # writer.add_scalar('training_recall', np.mean(recalls), epoch)
-    # writer.add_scalar('training_acc', np.mean(accs), epoch)
-    # writer.add_scalar('training_f1_score', np.mean(f1s), epoch)
 
+
+def update_img(params):
+    pred_config_spaces, i = params
+    free_space_indices = (pred_config_spaces[i,:] == 1 ).nonzero()
+    x_offset = [0,1,0,-1,1,-1,-1,1]
+    y_offset = [1,0,-1,0,1,1,-1,-1]
+    for free_space_idx in free_space_indices:
+        num_collisions = 0
+        for x_off,y_off in zip(x_offset,y_offset):
+            new_pos = torch.cat([torch.tensor([0]),free_space_idx]) + torch.tensor([i,0,x_off,y_off])
+            if torch.all(torch.tensor([i,0,0,0]) <= new_pos) and torch.all(new_pos <= torch.tensor([i,1,255,255])):
+                if pred_config_spaces[tuple(new_pos)] == 0:
+                    num_collisions += 1
+                if num_collisions >= 5:
+                    pred_config_spaces[tuple(torch.cat([torch.tensor([i]),free_space_idx]))] = 0
+                    break
 
 def evaluate(model: nn.Module, data, device):
     model.eval()
     total_loss = 0.0
     preds, actual = [], []
     with torch.no_grad():
+        a = 0
         for batch in tqdm(data):
             workspaces, config_spaces = batch['workspace'], batch['cobs']
             workspaces = workspaces.to(device)
             config_spaces = config_spaces.to(device)
             predicted_config_spaces = model(workspaces)
-            total_loss += criterion(predicted_config_spaces, config_spaces)
-
+            predicted_config_spaces = torch.nn.functional.tanh(predicted_config_spaces)
+            config_spaces.flatten()[(config_spaces.flatten() == 0).nonzero().flatten()] = -1
+            total_loss += my_loss_fn(predicted_config_spaces, config_spaces)
             predicted_config_spaces, config_spaces = predicted_config_spaces.to("cpu"), config_spaces.to("cpu")
-
-            pred_config_spaces = (predicted_config_spaces > threshold).float()
-
-            free_space_indices = (pred_config_spaces == 1).nonzero()
-            x_offset = [0,1,0,-1,1,-1,-1,1]
-            y_offset = [1,0,-1,0,1,1,-1,-1]
-            for free_space_idx in tqdm(free_space_indices):
-                num_collisions = 0
-                for x_off,y_off in zip(x_offset,y_offset):
-                    new_pos = free_space_idx + torch.tensor([0,0,x_off,y_off])
-                    if torch.all(torch.tensor([0,0,0,0]) <= new_pos) and torch.all(new_pos <= torch.tensor([5,1,511,511])):
-                        if pred_config_spaces[tuple(new_pos)] == 0:
-                            num_collisions += 1
-                    if num_collisions >= 3:
-                        pred_config_spaces[tuple(free_space_idx)] = 0
-                        break
-            preds.append(pred_config_spaces.flaten())
+            pred_config_space = (predicted_config_spaces.flatten() > 0 ).float()
+            config_spaces = (config_spaces.flatten() != -1).float()
+            preds.append(pred_config_space.flatten())
             actual.append(config_spaces.flatten())
         preds = torch.cat(preds,dim=-1).cpu()
         actual = torch.cat(actual,dim=-1).cpu()
@@ -284,7 +283,7 @@ def generate_workspace_configspace_pair_tensorboard(model, epoch, device, valida
 
             ax2 = fig.add_subplot(2, 3, i)
             configspace_img = config_space.cpu().detach().numpy()
-            ax2.imshow(np.transpose(configspace_img, (1, 2, 0)),extent=[-7,360,-7,360])
+            ax2.imshow(np.transpose(configspace_img, (1, 2, 0)),extent=[-7,360,-7,360],cmap='gray')
             ax2.set_frame_on(False)
             ax2.set_title(f"configspace-{image_id}")
             ax2.set_xlabel("Q1")
@@ -292,9 +291,10 @@ def generate_workspace_configspace_pair_tensorboard(model, epoch, device, valida
             i += 1
 
             ax3 = fig.add_subplot(2, 3, i)
+            predicted_config_space = (predicted_config_space > threshold).float()
             pred_img = predicted_config_space.cpu().detach().numpy()
             ax3.set_frame_on(False)
-            ax3.imshow(np.transpose(pred_img, (1, 2, 0)),extent=[-7,360,-7,360])
+            ax3.imshow(np.transpose(pred_img, (1, 2, 0)),extent=[-7,360,-7,360],cmap='gray')
             ax3.set_title(f"predicted-{image_id}")
             ax3.set_xlabel("Q1")
             ax3.set_ylabel("Q2")
@@ -332,7 +332,7 @@ def train(model: nn.Module, opt: torch.optim, scheduler: MultiStepLR, train_data
         if val_loss <= best_val_loss:
             best_val_loss = val_loss
         filename = datetime.now().strftime(
-            f'{hyperparams.weights_folder}/%d-%m-%y-%H_%M_SEGNET-{hyperparams.loss_fn}-{hyperparams.num_obstacles}.pth')
+            f'{hyperparams.weights_folder}/%d-%m-%y-%H_%M_SEGNET-{hyperparams.loss_fn}-{hyperparams.obstacles}.pth')
         torch.save(model.state_dict(), filename)
 
 
@@ -342,13 +342,21 @@ def set_critertion(loss_fn):
     if loss_fn == 'l1':
         criterion = nn.L1Loss(reduction='sum')
     elif loss_fn == 'l2':
-        criterion = nn.MSELoss(reduction='sum')
+        criterion = nn.MSELoss()
     elif loss_fn == 'l2_l1':
         criterion = nn.MSELoss(reduction='sum')
         criterion_2 = nn.L1Loss(reduction='sum')
     else:
         criterion = nn.BCEWithLogitsLoss(reduction='sum')
 
+def my_loss_fn(pred,actual):
+    pred_collision = pred.flatten()[(actual.flatten() == -1).nonzero().flatten()]
+    actual_collision = actual.flatten()[(actual.flatten() == -1).nonzero().flatten()]
+    pred_free = pred.flatten()[(actual.flatten() == 1).nonzero().flatten()]
+    actual_free = actual.flatten()[(actual.flatten() == 1).nonzero().flatten()]
+    a = collision_scale * criterion(pred_collision,actual_collision)
+    b = criterion(pred_free,actual_free)
+    return a + b
 
 def get_transforms(loss_fn):
     get_rid_alpha = transforms.Lambda(lambda x: x[:3])
@@ -385,7 +393,7 @@ if __name__ == '__main__':
     save_img(train_dataset[0]['workspace'], "test-workspace")
     save_img(train_dataset[0]['cobs'], "test-cobs")
 
-    train_dataloader = DataLoader(train_dataset, batch_size=hyperparams.batch_size, shuffle=False)
+    train_dataloader = DataLoader(train_dataset, batch_size=hyperparams.batch_size, shuffle=True)
     val_dataloader = DataLoader(val_dataset, batch_size=hyperparams.batch_size, shuffle=False)
     test_dataloader = DataLoader(test_dataset, batch_size=2, shuffle=False)
 
@@ -397,6 +405,7 @@ if __name__ == '__main__':
     print(f"USING {device}")
     print(f"Training on {hyperparams.data}")
     print(F"Training on objective {hyperparams.loss_fn}")
+    print(f"USING Threshold {threshold}")
 
     recall = Recall(task="binary", average="macro")
     precision = Precision(task="binary", average="macro")
@@ -413,7 +422,7 @@ if __name__ == '__main__':
     print("Total number of params: {}".format(total_params))
     model = model.to(device)
     opt = optim.Adadelta(model.parameters(), lr=.01)
-    scheduler = MultiStepLR(opt, milestones=[25, 50, 75, 100, 125, 150, 175, 200, 225], gamma=.75)
+    scheduler = MultiStepLR(opt, milestones=[25, 50, 75, 100,125,150,175,200], gamma=.75)
 
     if hyperparams.is_train:
         print(scheduler.get_last_lr()[0])
