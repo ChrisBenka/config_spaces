@@ -2,7 +2,7 @@
 ### SUBMITED TO IROS 2023
 
 ## Contributions 
-- We are the first to construct C-spaces directly from robotic workspaces using a convolutional encoder-decoder. The model achieves a$97.5\% F1-score for the prediction of configurations that belong to C-Free and C-clsn and limits undetected collisions to less than 2.5\%.
+- We are the first to construct C-spaces directly from robotic workspaces using a convolutional encoder-decoder. The model achieves a 97.5\% F1-score for the prediction of configurations that belong to C-Free and C-clsn and limits undetected collisions to less than 2.5\%.
 Our model learns highly transferable features between robotic workspaces involving new transformations on obstacles. After training on translation of obstacles, the model adapts to the removal and rotation of obstacles with little to no fine-tuning.
 
 ## Paper: 
